@@ -26,13 +26,17 @@ function isSuperAdmin() {
   return user && user.isSuperAdmin === true;
 }
 
+// Визначаємо мобільний пристрій
+function isMobile() {
+  return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
+}
+
 // Вхід через КВАРТИРУ + КОД
 async function login(buildingId, aptNumber, code) {
   const aptStr = String(aptNumber);
   const docId = `${buildingId}__${aptStr}`;
   const email = `apt-${buildingId}-${aptStr}@plaza-68f96.firebaseapp.com`;
 
-  // Перевіряємо квартиру
   const aptDoc = await db.collection('apartments').doc(docId).get();
   if (!aptDoc.exists) {
     throw new Error('Невірний номер квартири або код');
@@ -43,11 +47,9 @@ async function login(buildingId, aptNumber, code) {
     throw new Error('Невірний номер квартири або код');
   }
 
-  // Отримуємо дані будинку
   const buildingDoc = await db.collection('buildings').doc(buildingId).get();
   const buildingData = buildingDoc.exists ? buildingDoc.data() : { name: 'Будинок', address: '' };
 
-  // Firebase Auth
   let userCredential;
   try {
     userCredential = await auth.signInWithEmailAndPassword(email, code);
@@ -87,109 +89,90 @@ async function login(buildingId, aptNumber, code) {
   return user;
 }
 
-// Вхід через GOOGLE (тільки для супер-адмінів)
+// Вхід через GOOGLE
 async function startGoogleLogin() {
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
+  // На мобільному завжди використовуємо redirect
+  if (isMobile()) {
+    localStorage.setItem('expect_google_redirect', 'true');
+    await auth.signInWithRedirect(provider);
+    return null;
+  }
+
+  // На десктопі — popup
   try {
     const result = await auth.signInWithPopup(provider);
-    const googleUser = result.user;
-    const email = googleUser.email;
-    const displayName = googleUser.displayName || email;
-
-    if (!email) throw new Error('Не вдалося отримати email');
-
-    const adminDoc = await db.collection('admin_emails').doc(email).get();
-    let isAdminUser = false;
-
-    if (adminDoc.exists && adminDoc.data().isAdmin === true) {
-      isAdminUser = true;
-    } else {
-      const allAdmins = await db.collection('admin_emails').get();
-      if (allAdmins.empty) {
-        isAdminUser = true;
-        await db.collection('admin_emails').doc(email).set({
-          email, name: displayName, isAdmin: true,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      } else {
-        await auth.signOut();
-        throw new Error('Цей Google акаунт не має доступу. Зверніться до адміністратора.');
-      }
-    }
-
-    const user = {
-      apt: 'admin',
-      buildingId: null,
-      buildingName: 'Всі будинки',
-      isAdmin: isAdminUser,
-      isSuperAdmin: true,
-      name: displayName,
-      email,
-      uid: googleUser.uid,
-      authType: 'google',
-      photoURL: googleUser.photoURL || null
-    };
-
-    saveUserSession(user);
-    return user;
+    return await processGoogleUser(result.user);
   } catch (err) {
-    if (err.code === 'auth/popup-blocked') {
-      localStorage.setItem('expect_google_redirect', 'true');
-      auth.signInWithRedirect(provider);
-      throw new Error('redirect');
-    }
-    if (err.code === 'auth/popup-closed-by-user') {
+    if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
+      if (err.code === 'auth/popup-blocked') {
+        localStorage.setItem('expect_google_redirect', 'true');
+        await auth.signInWithRedirect(provider);
+        return null;
+      }
       throw new Error('Вхід скасовано');
     }
     throw err;
   }
 }
 
-// Обробка Google redirect
-async function checkGoogleRedirect() {
-  const expected = localStorage.getItem('expect_google_redirect');
-  if (!expected) return null;
-  localStorage.removeItem('expect_google_redirect');
+// Спільна логіка обробки Google користувача
+async function processGoogleUser(googleUser) {
+  const email = googleUser.email;
+  const displayName = googleUser.displayName || email;
 
+  if (!email) throw new Error('Не вдалося отримати email');
+
+  const adminDoc = await db.collection('admin_emails').doc(email).get();
+  let isAdminUser = false;
+
+  if (adminDoc.exists && adminDoc.data().isAdmin === true) {
+    isAdminUser = true;
+  } else {
+    const allAdmins = await db.collection('admin_emails').get();
+    if (allAdmins.empty) {
+      isAdminUser = true;
+      await db.collection('admin_emails').doc(email).set({
+        email,
+        name: displayName,
+        isAdmin: true,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } else {
+      await auth.signOut();
+      throw new Error('Цей Google акаунт не має доступу. Зверніться до адміністратора.');
+    }
+  }
+
+  const user = {
+    apt: 'admin',
+    buildingId: null,
+    buildingName: 'Всі будинки',
+    isAdmin: isAdminUser,
+    isSuperAdmin: true,
+    name: displayName,
+    email,
+    uid: googleUser.uid,
+    authType: 'google',
+    photoURL: googleUser.photoURL || null
+  };
+
+  saveUserSession(user);
+  return user;
+}
+
+// Обробка Google redirect — викликається ЗАВЖДИ при старті
+async function checkGoogleRedirect() {
   try {
     const result = await auth.getRedirectResult();
     if (!result || !result.user) return null;
 
-    const googleUser = result.user;
-    const email = googleUser.email;
-    const displayName = googleUser.displayName || email;
-    if (!email) return null;
-
-    const adminDoc = await db.collection('admin_emails').doc(email).get();
-    let isAdminUser = false;
-
-    if (adminDoc.exists && adminDoc.data().isAdmin === true) {
-      isAdminUser = true;
-    } else {
-      const allAdmins = await db.collection('admin_emails').get();
-      if (allAdmins.empty) {
-        isAdminUser = true;
-        await db.collection('admin_emails').doc(email).set({
-          email, name: displayName, isAdmin: true,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      } else {
-        await auth.signOut();
-        throw new Error('Цей Google акаунт не має доступу.');
-      }
-    }
-
-    const user = {
-      apt: 'admin', buildingId: null, buildingName: 'Всі будинки',
-      isAdmin: isAdminUser, isSuperAdmin: true,
-      name: displayName, email, uid: googleUser.uid,
-      authType: 'google', photoURL: googleUser.photoURL || null
-    };
-    saveUserSession(user);
-    return user;
+    localStorage.removeItem('expect_google_redirect');
+    return await processGoogleUser(result.user);
   } catch (err) {
+    localStorage.removeItem('expect_google_redirect');
     console.error('Google redirect error:', err);
     throw err;
   }
@@ -199,7 +182,7 @@ async function checkGoogleRedirect() {
 async function logout() {
   try { await auth.signOut(); } catch (e) {}
   clearUserSession();
-  window.location.reload();
+  window.location.href = window.location.pathname; // чистимо URL параметри теж
 }
 
 // Оновити UI після логіну
@@ -222,8 +205,10 @@ function applyAuthUI(user) {
 
   const aptInfo = user.apt && user.apt !== 'admin' ? ` · Кв.${user.apt}` : '';
   const adminInfo = user.isSuperAdmin ? ' (Супер-адмін)' : user.isAdmin ? ' (Адмін)' : '';
-  const buildingInfo = user.buildingName ? ` · ${user.buildingName}` : '';
-  document.getElementById('userInfo').textContent = `${user.name}${adminInfo}${aptInfo}${buildingInfo}`;
+  const buildingInfo = user.buildingName && user.buildingName !== 'Всі будинки'
+    ? ` · ${user.buildingName}` : '';
+  document.getElementById('userInfo').textContent =
+    `${user.name}${adminInfo}${aptInfo}${buildingInfo}`;
 }
 
 // ---------- АДМІН ФУНКЦІЇ ----------
