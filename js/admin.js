@@ -5,7 +5,6 @@ let adminCurrentSection = null;
 function renderAdmin() {
   const content = document.getElementById('adminSectionContent');
 
-  // Показуємо/ховаємо секції
   if (!adminCurrentSection) {
     content.innerHTML = '<p style="color: var(--gray-400); text-align: center; padding: 20px;">Оберіть розділ вище</p>';
     return;
@@ -75,23 +74,43 @@ function showApartmentForm(title, id, code, isAdmin, name) {
   openModal(title, `
     <div class="form-group">
       <label>Номер квартири</label>
-      <input type="number" id="aptFieldNum" class="form-input" value="${id}" placeholder="1-24" min="1" max="24" ${id ? 'readonly' : ''}>
+      <input 
+        type="text" 
+        id="aptFieldNum" 
+        class="form-input" 
+        value="${id}" 
+        placeholder="Наприклад: 1" 
+        inputmode="numeric"
+        pattern="[0-9]*"
+        ${id ? 'readonly style="background: var(--gray-100); color: var(--gray-500);"' : ''}
+      >
     </div>
     <div class="form-group">
       <label>Код доступу</label>
-      <input type="text" id="aptFieldCode" class="form-input" value="${code}" placeholder="Код для входу">
+      <input 
+        type="text" 
+        id="aptFieldCode" 
+        class="form-input" 
+        value="${code}" 
+        placeholder="Код для входу"
+        autocomplete="off"
+      >
     </div>
     <div class="form-group">
       <label>Назва (необов'язково)</label>
-      <input type="text" id="aptFieldName" class="form-input" value="${name}" placeholder="Квартира / Ім'я">
+      <input 
+        type="text" 
+        id="aptFieldName" 
+        class="form-input" 
+        value="${name}" 
+        placeholder="Квартира / Ім'я мешканця"
+      >
     </div>
-    <div class="form-group">
-      <label>
-        <input type="checkbox" id="aptFieldAdmin" ${isAdmin ? 'checked' : ''}> 
-        Адміністратор
-      </label>
+    <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+      <input type="checkbox" id="aptFieldAdmin" ${isAdmin ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;">
+      <label for="aptFieldAdmin" style="margin: 0; cursor: pointer;">Адміністратор</label>
     </div>
-    <button onclick="submitApartment()" class="btn btn-primary btn-full">Зберегти</button>
+    <button onclick="submitApartment()" class="btn btn-primary btn-full" style="margin-top: 8px;">Зберегти</button>
   `);
 }
 
@@ -129,17 +148,20 @@ async function renderAdminAnnouncements() {
         <button class="btn btn-sm btn-primary" onclick="document.getElementById('addAnnouncementBtn').click()">+ Додати</button>
       </div>
       <div class="content-list">
-        ${anns.map(a => `
-          <div class="content-card" style="padding: 12px 16px;">
-            <div style="display: flex; justify-content: space-between;">
-              <div>
-                <strong>${escapeHtml(a.title)}</strong>
-                <div style="font-size: 13px; color: var(--gray-500);">${formatDate(a.createdAt)}</div>
+        ${anns.length === 0
+          ? '<div class="empty-state"><div class="empty-icon">📭</div><p>Оголошень поки немає</p></div>'
+          : anns.map(a => `
+            <div class="content-card" style="padding: 12px 16px;">
+              <div style="display: flex; justify-content: space-between;">
+                <div>
+                  <strong>${escapeHtml(a.title)}</strong>
+                  <div style="font-size: 13px; color: var(--gray-500);">${formatDate(a.createdAt)}</div>
+                </div>
+                <button class="btn btn-sm btn-danger" onclick="confirmDeleteAnnouncement('${a.id}')">🗑️</button>
               </div>
-              <button class="btn btn-sm btn-danger" onclick="confirmDeleteAnnouncement('${a.id}')">🗑️</button>
             </div>
-          </div>
-        `).join('')}
+          `).join('')
+        }
       </div>
     `;
   } catch (e) {
@@ -160,17 +182,20 @@ async function renderAdminContacts() {
         <button class="btn btn-sm btn-primary" onclick="showAddContact()">+ Додати</button>
       </div>
       <div class="content-list">
-        ${contacts.map(c => `
-          <div class="content-card" style="padding: 12px 16px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <strong>${c.icon || '📞'} ${escapeHtml(c.name)}</strong>
-                <div style="font-size: 13px; color: var(--gray-500);">${c.phone}${c.category ? ' · ' + escapeHtml(c.category) : ''}</div>
+        ${contacts.length === 0
+          ? '<div class="empty-state"><div class="empty-icon">📞</div><p>Контактів поки немає</p></div>'
+          : contacts.map(c => `
+            <div class="content-card" style="padding: 12px 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <strong>${c.icon || '📞'} ${escapeHtml(c.name)}</strong>
+                  <div style="font-size: 13px; color: var(--gray-500);">${escapeHtml(c.phone)}${c.category ? ' · ' + escapeHtml(c.category) : ''}</div>
+                </div>
+                <button class="btn btn-sm btn-danger" onclick="confirmDeleteContact('${c.id}')">🗑️</button>
               </div>
-              <button class="btn btn-sm btn-danger" onclick="confirmDeleteContact('${c.id}')">🗑️</button>
             </div>
-          </div>
-        `).join('')}
+          `).join('')
+        }
       </div>
     `;
   } catch (e) {
@@ -225,6 +250,8 @@ function confirmDeleteContact(id) {
     deleteContact(id).then(() => {
       showToast('Видалено', 'success');
       renderAdminContacts();
+    }).catch(e => {
+      showToast('Помилка: ' + e.message, 'error');
     });
   }
 }
@@ -242,8 +269,9 @@ async function renderAdminGoogleAdmins() {
         <button class="btn btn-sm btn-primary" onclick="showAddGoogleAdmin()">+ Додати</button>
       </div>
       <div class="content-list">
-        ${admins.length === 0 ? '<div class="empty-state"><div class="empty-icon">🔐</div><p>Немає Google адмінів.<br>Перший, хто увійде через Google, стане адміном автоматично.</p></div>' : 
-          admins.map(a => `
+        ${admins.length === 0
+          ? '<div class="empty-state"><div class="empty-icon">🔐</div><p>Немає Google адмінів.<br>Перший, хто увійде через Google, стане адміном автоматично.</p></div>'
+          : admins.map(a => `
             <div class="content-card" style="padding: 12px 16px;">
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
