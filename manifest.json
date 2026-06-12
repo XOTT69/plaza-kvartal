@@ -1,0 +1,11 @@
+{
+  "name": "Мій Дім",
+  "short_name": "МійДім",
+  "description": "Додаток для мешканців будинку",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "lang": "uk"
+}
