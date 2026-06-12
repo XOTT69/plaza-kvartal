@@ -72,20 +72,33 @@
           <div class="auth-icon">🏠</div>
           <h2>Мій Дім</h2>
           <p class="auth-subtitle">Додаток для мешканців</p>
+
           <form id="loginForm">
+            <!-- Селектор будинку -->
             <div class="form-group">
-              <label for="aptNumber">Номер квартири</label>
-              <input type="number" id="aptNumber" class="form-input" placeholder="1-24" min="1" max="24" required>
+              <label for="buildingSelect">Будинок</label>
+              <select id="buildingSelect" class="form-input">
+                <option value="">Завантаження...</option>
+              </select>
             </div>
-            <div class="form-group">
-              <label for="aptCode">Код доступу</label>
-              <input type="password" id="aptCode" class="form-input" placeholder="Ваш код" required>
+
+            <!-- Поля квартири — ховаються поки не обрано будинок -->
+            <div id="aptFields" class="hidden">
+              <div class="form-group">
+                <label for="aptNumber">Номер квартири</label>
+                <input type="number" id="aptNumber" class="form-input" placeholder="Номер квартири" min="1" required>
+              </div>
+              <div class="form-group">
+                <label for="aptCode">Код доступу</label>
+                <input type="password" id="aptCode" class="form-input" placeholder="Ваш код" required>
+              </div>
             </div>
+
             <button type="submit" class="btn btn-primary btn-full">Увійти</button>
           </form>
-          <div class="auth-divider">
-            <span>або</span>
-          </div>
+
+          <div class="auth-divider"><span>або</span></div>
+
           <button id="googleLoginBtn" class="btn btn-google btn-full">
             <svg width="20" height="20" viewBox="0 0 48 48">
               <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -93,10 +106,12 @@
               <path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.77.87 7.35 2.56 10.54l7.97-5.95z"/>
               <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 5.95C6.51 42.62 14.62 48 24 48z"/>
             </svg>
-            Увійти через Google
+            Увійти через Google (адмін)
           </button>
+
           <p id="loginError" class="error-message hidden"></p>
           <p id="googleLoginError" class="error-message hidden"></p>
+
           <div style="margin-top: 24px; font-size: 12px; color: var(--gray-400); text-align: center;">
             <span onclick="diag()" style="cursor: pointer; text-decoration: underline;">🔍 Діагностика</span>
           </div>
@@ -107,7 +122,7 @@
       <div id="home" class="page hidden">
         <div class="welcome-section">
           <h2 id="welcomeText">Ласкаво просимо!</h2>
-          <p class="welcome-desc">Будьте в курсі подій будинку</p>
+          <p class="welcome-desc" id="welcomeBuilding">Будьте в курсі подій будинку</p>
         </div>
         <div class="quick-actions">
           <a href="#" data-page="announcements" class="quick-action-card">
@@ -204,21 +219,25 @@
           <h2>⚙️ Адмінка</h2>
         </div>
         <div class="admin-sections">
+          <div class="admin-card" data-section="buildings">
+            <h3>🏢 Будинки</h3>
+            <p>Додати/редагувати будинки ЖК</p>
+          </div>
           <div class="admin-card" data-section="apartments">
-            <h3>🔑 Управління квартирами</h3>
+            <h3>🔑 Квартири</h3>
             <p>Додати/редагувати коди доступу</p>
           </div>
           <div class="admin-card" data-section="announcements">
-            <h3>📢 Управління оголошеннями</h3>
-            <p>Створювати, редагувати, видаляти</p>
+            <h3>📢 Оголошення</h3>
+            <p>Створювати, видаляти</p>
           </div>
           <div class="admin-card" data-section="contacts">
-            <h3>🆘 Аварійні контакти</h3>
+            <h3>🆘 Контакти</h3>
             <p>Редагувати список контактів</p>
           </div>
           <div class="admin-card" data-section="google-admins">
             <h3>🔐 Google адміни</h3>
-            <p>Хто може входити через Google</p>
+            <p>Супер-адміни системи</p>
           </div>
         </div>
         <div id="adminSectionContent"></div>
@@ -252,8 +271,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 
   <!-- App scripts -->
   <script src="js/config.js"></script>
