@@ -52,6 +52,14 @@ async function renderHome() {
   const annList = document.getElementById('homeAnnouncementsList');
   const issueList = document.getElementById('homeIssuesList');
 
+  // Показуємо назву будинку
+  const welcomeBuilding = document.getElementById('welcomeBuilding');
+  if (welcomeBuilding && user) {
+    welcomeBuilding.textContent = user.buildingName
+      ? `${user.buildingName}${user.buildingAddress ? ' · ' + user.buildingAddress : ''}`
+      : 'Будьте в курсі подій будинку';
+  }
+
   // Останні оголошення
   try {
     const { items: anns } = await getAnnouncements();
@@ -133,7 +141,6 @@ async function renderAnnouncements() {
 async function loadMoreAnnouncements() {
   const list = document.getElementById('announcementsList');
   const loadMoreBtn = document.getElementById('announcementsLoadMore');
-
   try {
     const { items, hasMore } = await getAnnouncements(true);
     announcementsCache = [...announcementsCache, ...items];
@@ -163,7 +170,7 @@ function confirmDeleteAnnouncement(id) {
     deleteAnnouncement(id).then(() => {
       showToast('Видалено', 'success');
       renderAnnouncements();
-    });
+    }).catch(e => showToast('Помилка: ' + e.message, 'error'));
   }
 }
 
@@ -210,7 +217,7 @@ async function renderContacts() {
           <div class="contact-icon">${c.icon || '📞'}</div>
           <div class="contact-info">
             <h3>${escapeHtml(c.name)}</h3>
-            <p>${escapeHtml(c.category)}</p>
+            <p>${escapeHtml(c.category || '')}</p>
           </div>
           <a href="tel:${c.phone}" class="contact-phone">${c.phone}</a>
         </div>
@@ -230,37 +237,48 @@ async function renderPolls() {
     const polls = await getPolls();
     if (polls.length === 0) {
       list.innerHTML = '<div class="empty-state"><div class="empty-icon">🗳</div><p>Голосувань поки немає</p></div>';
-    } else {
-      const user = getCurrentUser();
-      list.innerHTML = polls.map(p => {
-        const totalVotes = p.options.reduce((sum, o) => sum + (o.votes ? o.votes.length : 0), 0);
-        const hasVoted = p.options.some(o => o.votes && o.votes.includes(user.apt));
-        return `
-          <div class="content-card ${!p.active ? 'poll-closed' : ''}">
-            <h3>${escapeHtml(p.question)}</h3>
-            ${!p.active ? '<span class="badge badge-warning">Голосування завершено</span>' : ''}
-            <div class="poll-options">
-              ${p.options.map((opt, idx) => {
-                const voteCount = opt.votes ? opt.votes.length : 0;
-                const percent = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
-                const voted = opt.votes && opt.votes.includes(user.apt);
-                return `
-                  <div class="poll-option">
-                    <button ${!p.active || hasVoted ? 'disabled' : ''} onclick="votePollAction('${p.id}', ${idx})" class="${voted ? 'voted' : ''}">
-                      <span>${escapeHtml(opt.text)}</span>
-                      <span class="poll-percent">${percent}%</span>
-                    </button>
-                    <div class="poll-bar"><div class="poll-bar-fill" style="width: ${percent}%"></div></div>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-            <div class="poll-total">Всього голосів: ${totalVotes}</div>
-            <div class="meta">Створено: ${formatDate(p.createdAt)}</div>
-          </div>
-        `;
-      }).join('');
+      return;
     }
+
+    const user = getCurrentUser();
+    list.innerHTML = polls.map(p => {
+      const totalVotes = p.options.reduce((sum, o) => sum + (o.votes ? o.votes.length : 0), 0);
+      const hasVoted = p.options.some(o => o.votes && o.votes.includes(user.apt));
+
+      return `
+        <div class="content-card ${!p.active ? 'poll-closed' : ''}">
+          <h3>${escapeHtml(p.question)}</h3>
+          ${!p.active ? '<span class="badge badge-warning">Голосування завершено</span>' : ''}
+          <div class="poll-options">
+            ${p.options.map((opt, idx) => {
+              const voteCount = opt.votes ? opt.votes.length : 0;
+              const percent = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
+              const voted = opt.votes && opt.votes.includes(user.apt);
+              return `
+                <div class="poll-option">
+                  <button
+                    ${!p.active || hasVoted ? 'disabled' : ''}
+                    onclick="votePollAction('${p.id}', ${idx})"
+                    class="${voted ? 'voted' : ''}"
+                  >
+                    <span>${escapeHtml(opt.text)}</span>
+                    <span class="poll-percent">${percent}%</span>
+                  </button>
+                  <div class="poll-bar">
+                    <div class="poll-bar-fill" style="width: ${percent}%"></div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+          <div class="poll-total">Всього голосів: ${totalVotes}</div>
+          <div class="meta">
+            Створено: ${formatDate(p.createdAt)}
+            ${isAdmin() && p.active ? `<span style="margin-left: auto; cursor: pointer; color: var(--gray-400);" onclick="confirmClosePoll('${p.id}')">🔒 Завершити</span>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
   } catch (e) {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><p>Помилка завантаження</p></div>';
   }
@@ -274,6 +292,15 @@ async function votePollAction(pollId, optionIndex) {
     renderPolls();
   } catch (e) {
     showToast(e.message, 'error');
+  }
+}
+
+function confirmClosePoll(pollId) {
+  if (confirm('Завершити голосування? Це не можна скасувати.')) {
+    closePoll(pollId).then(() => {
+      showToast('Голосування завершено', 'success');
+      renderPolls();
+    }).catch(e => showToast('Помилка: ' + e.message, 'error'));
   }
 }
 
@@ -312,7 +339,10 @@ async function submitPoll() {
     document.getElementById('pollOpt4').value.trim()
   ].filter(o => o);
 
-  if (!question || opts.length < 2) { showToast('Введіть питання та мінімум 2 варіанти', 'error'); return; }
+  if (!question || opts.length < 2) {
+    showToast('Введіть питання та мінімум 2 варіанти', 'error');
+    return;
+  }
 
   try {
     await addPoll(question, opts);
@@ -343,6 +373,7 @@ async function renderNeighborPosts() {
           <div class="meta">
             <span>${formatDate(p.createdAt)}</span>
             <span>${escapeHtml(p.author)}</span>
+            ${isAdmin() ? `<span style="color: var(--danger); cursor: pointer; margin-left: auto;" onclick="confirmDeleteNeighborPost('${p.id}')">🗑️</span>` : ''}
           </div>
         </div>
       `).join('');
@@ -355,6 +386,15 @@ async function renderNeighborPosts() {
 function categoryLabel(cat) {
   const labels = { give: '🎁 Віддам', find: '🔎 Знайшов', lost: '😢 Загубив', other: '📌 Інше' };
   return labels[cat] || cat;
+}
+
+function confirmDeleteNeighborPost(id) {
+  if (confirm('Видалити оголошення?')) {
+    deleteNeighborPost(id).then(() => {
+      showToast('Видалено', 'success');
+      renderNeighborPosts();
+    }).catch(e => showToast('Помилка: ' + e.message, 'error'));
+  }
 }
 
 document.getElementById('addNeighborPostBtn')?.addEventListener('click', function() {
@@ -442,7 +482,7 @@ function renderIssueCard(i) {
   const user = getCurrentUser();
   return `
     <div class="content-card">
-      <div style="display: flex; justify-content: space-between; align-items: start;">
+      <div style="display: flex; justify-content: space-between; align-items: start; gap: 8px;">
         <h3>${escapeHtml(i.title)}</h3>
         <span class="issue-status ${i.status}">${issueStatusText(i.status)}</span>
       </div>
@@ -451,7 +491,9 @@ function renderIssueCard(i) {
       ${i.lastComment ? `
         <div style="margin-top: 10px; padding: 10px; background: var(--gray-50); border-radius: 6px; font-size: 13px; border-left: 3px solid var(--primary);">
           <strong>${escapeHtml(i.lastComment.author)}</strong>: ${escapeHtml(i.lastComment.text)}
-          <div style="font-size: 11px; color: var(--gray-400); margin-top: 4px;">${i.lastComment.createdAt ? new Date(i.lastComment.createdAt).toLocaleDateString('uk-UA') : ''}</div>
+          <div style="font-size: 11px; color: var(--gray-400); margin-top: 4px;">
+            ${i.lastComment.createdAt ? new Date(i.lastComment.createdAt).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : ''}
+          </div>
         </div>
       ` : ''}
 
@@ -460,7 +502,10 @@ function renderIssueCard(i) {
         <span>${escapeHtml(i.author)}</span>
         ${user.isAdmin ? `
           <div style="display: flex; gap: 8px; margin-left: auto; align-items: center; flex-wrap: wrap;">
-            <select onchange="updateIssueStatusAction('${i.id}', this.value)" style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--gray-300); font-size: 12px;">
+            <select
+              onchange="updateIssueStatusAction('${i.id}', this.value)"
+              style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--gray-300); font-size: 12px; cursor: pointer;"
+            >
               <option value="new" ${i.status === 'new' ? 'selected' : ''}>🟢 Нове</option>
               <option value="in-progress" ${i.status === 'in-progress' ? 'selected' : ''}>🟡 В роботі</option>
               <option value="pending" ${i.status === 'pending' ? 'selected' : ''}>🔴 Очікує</option>
@@ -495,11 +540,10 @@ async function updateIssueStatusAction(issueId, status) {
   }
 }
 
-// ✅ НОВЕ: модалка коментаря адміна
 function openCommentModal(issueId) {
   openModal('Додати коментар', `
     <div class="form-group">
-      <label>Ваш коментар для мешканця</label>
+      <label>Коментар для мешканця</label>
       <textarea id="issueCommentText" class="form-input" placeholder="Наприклад: Майстер прийде у вівторок о 10:00" rows="4"></textarea>
     </div>
     <button onclick="submitIssueComment('${issueId}')" class="btn btn-primary btn-full">Надіслати</button>
@@ -556,27 +600,34 @@ async function renderEvents() {
     const events = await getEvents();
     if (events.length === 0) {
       list.innerHTML = '<div class="empty-state"><div class="empty-icon">📅</div><p>Подій поки немає</p></div>';
-    } else {
-      const now = new Date();
-      list.innerHTML = events.map(e => {
-        const d = e.eventDate.toDate ? e.eventDate.toDate() : new Date(e.eventDate);
-        const isPast = d < now;
-        return `
-          <div class="event-card" style="${isPast ? 'opacity: 0.5;' : ''}">
-            <div class="event-date">
-              <span class="day">${d.getDate()}</span>
-              <span class="month">${d.toLocaleDateString('uk-UA', { month: 'short' })}</span>
-            </div>
-            <div style="flex: 1;">
-              <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">${escapeHtml(e.title)}</h3>
-              ${e.description ? `<p style="font-size: 13px; color: var(--gray-500);">${escapeHtml(e.description)}</p>` : ''}
-              ${isPast ? '<span style="font-size: 11px; color: var(--gray-400);">Минула подія</span>' : ''}
-            </div>
-            ${isAdmin() ? `<button class="btn btn-sm btn-danger" onclick="confirmDeleteEvent('${e.id}')" style="align-self: center;">🗑️</button>` : ''}
-          </div>
-        `;
-      }).join('');
+      return;
     }
+
+    const now = new Date();
+    list.innerHTML = events.map(e => {
+      const d = e.eventDate.toDate ? e.eventDate.toDate() : new Date(e.eventDate);
+      const isPast = d < now;
+      return `
+        <div class="event-card" style="${isPast ? 'opacity: 0.5;' : ''}">
+          <div class="event-date">
+            <span class="day">${d.getDate()}</span>
+            <span class="month">${d.toLocaleDateString('uk-UA', { month: 'short' })}</span>
+          </div>
+          <div style="flex: 1;">
+            <h3 style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">${escapeHtml(e.title)}</h3>
+            ${e.description ? `<p style="font-size: 13px; color: var(--gray-500);">${escapeHtml(e.description)}</p>` : ''}
+            ${isPast ? '<span style="font-size: 11px; color: var(--gray-400);">Минула подія</span>' : ''}
+          </div>
+          ${isAdmin() ? `
+            <button
+              class="btn btn-sm btn-danger"
+              onclick="confirmDeleteEvent('${e.id}')"
+              style="align-self: center;"
+            >🗑️</button>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
   } catch (e) {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><p>Помилка завантаження</p></div>';
   }
@@ -587,7 +638,7 @@ function confirmDeleteEvent(id) {
     deleteEvent(id).then(() => {
       showToast('Видалено', 'success');
       renderEvents();
-    });
+    }).catch(e => showToast('Помилка: ' + e.message, 'error'));
   }
 }
 
