@@ -73,8 +73,24 @@
           <h2>Мій Дім</h2>
           <p class="auth-subtitle">Додаток для мешканців</p>
 
-          <form id="loginForm">
-            <!-- Селектор будинку -->
+          <!-- Підказка коли немає будинків -->
+          <div id="noBuildingsHint" class="hidden" style="
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            color: #92400e;
+            text-align: left;
+            width: 100%;
+            max-width: 320px;
+          ">
+            👋 Перший запуск!<br>
+            Натисніть <strong>"Увійти через Google"</strong> щоб стати адміном і створити перший будинок.
+          </div>
+
+          <form id="loginForm" style="width: 100%; max-width: 320px;">
             <div class="form-group">
               <label for="buildingSelect">Будинок</label>
               <select id="buildingSelect" class="form-input">
@@ -82,15 +98,27 @@
               </select>
             </div>
 
-            <!-- Поля квартири — ховаються поки не обрано будинок -->
             <div id="aptFields" class="hidden">
               <div class="form-group">
                 <label for="aptNumber">Номер квартири</label>
-                <input type="number" id="aptNumber" class="form-input" placeholder="Номер квартири" min="1" required>
+                <input
+                  type="number"
+                  id="aptNumber"
+                  class="form-input"
+                  placeholder="Номер квартири"
+                  min="1"
+                  inputmode="numeric"
+                >
               </div>
               <div class="form-group">
                 <label for="aptCode">Код доступу</label>
-                <input type="password" id="aptCode" class="form-input" placeholder="Ваш код" required>
+                <input
+                  type="password"
+                  id="aptCode"
+                  class="form-input"
+                  placeholder="Ваш код"
+                  autocomplete="current-password"
+                >
               </div>
             </div>
 
@@ -99,7 +127,7 @@
 
           <div class="auth-divider"><span>або</span></div>
 
-          <button id="googleLoginBtn" class="btn btn-google btn-full">
+          <button id="googleLoginBtn" class="btn btn-google btn-full" style="max-width: 320px;">
             <svg width="20" height="20" viewBox="0 0 48 48">
               <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
               <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
@@ -161,7 +189,7 @@
           <button id="addAnnouncementBtn" class="btn btn-sm admin-only hidden">+ Додати</button>
         </div>
         <div id="announcementsList" class="content-list"></div>
-        <div id="announcementsLoadMore" class="hidden" style="text-align:center; margin-top: 16px;">
+        <div id="announcementsLoadMore" class="hidden" style="text-align: center; margin-top: 16px;">
           <button onclick="loadMoreAnnouncements()" class="btn btn-secondary">Завантажити ще</button>
         </div>
       </div>
@@ -199,7 +227,7 @@
           <button id="addIssueBtn" class="btn btn-sm">+ Повідомити</button>
         </div>
         <div id="issuesList" class="content-list"></div>
-        <div id="issuesLoadMore" class="hidden" style="text-align:center; margin-top: 16px;">
+        <div id="issuesLoadMore" class="hidden" style="text-align: center; margin-top: 16px;">
           <button onclick="loadMoreIssues()" class="btn btn-secondary">Завантажити ще</button>
         </div>
       </div>
