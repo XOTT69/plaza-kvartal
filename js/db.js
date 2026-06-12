@@ -1,17 +1,30 @@
 // ===== РОБОТА З FIRESTORE =====
 
+const PAGE_SIZE = 20;
+
 // ---------- ОГОЛОШЕННЯ ----------
-function getAnnouncements() {
-  return db.collection('announcements')
-    .get()
-    .then(snapshot => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      return data.sort((a, b) => {
-        const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
-        const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
-        return bTime - aTime;
-      });
-    });
+let lastAnnouncementDoc = null;
+
+async function getAnnouncements(loadMore = false) {
+  if (!loadMore) lastAnnouncementDoc = null;
+
+  let query = db.collection('announcements')
+    .orderBy('createdAt', 'desc')
+    .limit(PAGE_SIZE);
+
+  if (loadMore && lastAnnouncementDoc) {
+    query = query.startAfter(lastAnnouncementDoc);
+  }
+
+  const snapshot = await query.get();
+  if (snapshot.docs.length > 0) {
+    lastAnnouncementDoc = snapshot.docs[snapshot.docs.length - 1];
+  }
+
+  return {
+    items: snapshot.docs.map(d => ({ id: d.id, ...d.data() })),
+    hasMore: snapshot.docs.length === PAGE_SIZE
+  };
 }
 
 function addAnnouncement(title, content) {
@@ -72,10 +85,7 @@ function getPolls() {
 }
 
 function addPoll(question, options) {
-  const opts = options.map(text => ({
-    text,
-    votes: []
-  }));
+  const opts = options.map(text => ({ text, votes: [] }));
   return db.collection('polls').add({
     question,
     options: opts,
@@ -93,18 +103,14 @@ function votePoll(pollId, optionIndex, user) {
     const data = doc.data();
     const options = [...data.options];
 
-    // Перевіряємо чи вже голосував
     for (let i = 0; i < options.length; i++) {
       if (options[i].votes && options[i].votes.includes(user.apt)) {
         throw new Error('Ви вже проголосували');
       }
     }
 
-    if (!options[optionIndex].votes) {
-      options[optionIndex].votes = [];
-    }
+    if (!options[optionIndex].votes) options[optionIndex].votes = [];
     options[optionIndex].votes.push(user.apt);
-
     transaction.update(pollRef, { options });
   });
 }
@@ -145,22 +151,35 @@ function deleteNeighborPost(id) {
 }
 
 // ---------- ПРОБЛЕМИ ----------
-function getIssues() {
+let lastIssueDoc = null;
+
+async function getIssues(loadMore = false) {
+  if (!loadMore) lastIssueDoc = null;
+
   const user = getCurrentUser();
-  let query = db.collection('issues');
+  let query = db.collection('issues').orderBy('createdAt', 'desc');
 
   if (!user.isAdmin) {
-    query = query.where('authorApt', '==', user.apt);
+    query = db.collection('issues')
+      .where('authorApt', '==', user.apt)
+      .orderBy('createdAt', 'desc');
   }
 
-  return query.get().then(snapshot => {
-    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    return data.sort((a, b) => {
-      const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
-      const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
-      return bTime - aTime;
-    });
-  });
+  query = query.limit(PAGE_SIZE);
+
+  if (loadMore && lastIssueDoc) {
+    query = query.startAfter(lastIssueDoc);
+  }
+
+  const snapshot = await query.get();
+  if (snapshot.docs.length > 0) {
+    lastIssueDoc = snapshot.docs[snapshot.docs.length - 1];
+  }
+
+  return {
+    items: snapshot.docs.map(d => ({ id: d.id, ...d.data() })),
+    hasMore: snapshot.docs.length === PAGE_SIZE
+  };
 }
 
 function addIssue(title, description) {
@@ -182,10 +201,22 @@ function updateIssueStatus(issueId, status, comment) {
     updateData.lastComment = {
       text: comment,
       author: getCurrentUser().name,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      createdAt: new Date().toISOString()
     };
   }
   return db.collection('issues').doc(issueId).update(updateData);
+}
+
+// ✅ НОВЕ: додати коментар адміна
+function addIssueComment(issueId, text) {
+  const user = getCurrentUser();
+  return db.collection('issues').doc(issueId).update({
+    lastComment: {
+      text,
+      author: user.name,
+      createdAt: new Date().toISOString()
+    }
+  });
 }
 
 // ---------- ПОДІЇ ----------
