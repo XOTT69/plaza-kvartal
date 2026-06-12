@@ -49,14 +49,12 @@ document.querySelector('.modal-close').addEventListener('click', closeModal);
 // ---------- ГОЛОВНА ----------
 async function renderHome() {
   const user = getCurrentUser();
-  
-  // Якщо адмін і даних немає — показуємо підказку
   const annList = document.getElementById('homeAnnouncementsList');
   const issueList = document.getElementById('homeIssuesList');
 
   // Останні оголошення
   try {
-    const anns = await db.collection('announcements').get().then(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
+    const { items: anns } = await getAnnouncements();
     if (anns.length === 0) {
       if (user && user.isAdmin) {
         annList.innerHTML = `
@@ -65,13 +63,12 @@ async function renderHome() {
               📭 Оголошень поки немає<br>
               <span style="font-size: 12px;">Перейдіть в <a href="#" data-page="announcements" style="color: var(--primary);">Оголошення</a> щоб створити перше</span>
             </p>
-          </div>
-        `;
+          </div>`;
       } else {
         annList.innerHTML = '<p class="empty-state" style="padding: 16px 0;"><span class="empty-icon">📭</span><br>Поки немає оголошень</p>';
       }
     } else {
-      annList.innerHTML = anns.sort((a,b) => (b.createdAt?.toMillis?.()||0) - (a.createdAt?.toMillis?.()||0)).slice(0, 3).map(a => `
+      annList.innerHTML = anns.slice(0, 3).map(a => `
         <div class="content-card" style="margin-bottom: 8px; cursor: pointer;" onclick="navigateTo('announcements')">
           <h3>${escapeHtml(a.title)}</h3>
           <p>${escapeHtml(a.content).substring(0, 80)}${a.content.length > 80 ? '...' : ''}</p>
@@ -86,12 +83,7 @@ async function renderHome() {
 
   // Мої проблеми
   try {
-    let issuesQuery = db.collection('issues');
-    if (!user || !user.isAdmin) {
-      issuesQuery = issuesQuery.where('authorApt', '==', user?.apt || 'none');
-    }
-    const issues = await issuesQuery.get().then(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
-    
+    const { items: issues } = await getIssues();
     if (issues.length === 0) {
       issueList.innerHTML = `
         <p class="empty-state" style="padding: 16px 0;">
@@ -99,7 +91,7 @@ async function renderHome() {
           ${user && user.isAdmin ? 'Проблем від мешканців поки немає' : 'У вас немає проблем'}
         </p>`;
     } else {
-      issueList.innerHTML = issues.sort((a,b) => (b.createdAt?.toMillis?.()||0) - (a.createdAt?.toMillis?.()||0)).slice(0, 3).map(i => `
+      issueList.innerHTML = issues.slice(0, 3).map(i => `
         <div class="content-card" style="margin-bottom: 8px;">
           <h3>${escapeHtml(i.title)}</h3>
           <span class="issue-status ${i.status}">${issueStatusText(i.status)}</span>
@@ -114,30 +106,56 @@ async function renderHome() {
 }
 
 // ---------- ОГОЛОШЕННЯ ----------
+let announcementsCache = [];
+
 async function renderAnnouncements() {
+  announcementsCache = [];
   const list = document.getElementById('announcementsList');
+  const loadMoreBtn = document.getElementById('announcementsLoadMore');
   list.innerHTML = '<div class="loading-spinner" style="position: relative;"><div class="spinner"></div></div>';
 
   try {
-    const anns = await getAnnouncements();
-    if (anns.length === 0) {
+    const { items, hasMore } = await getAnnouncements(false);
+    announcementsCache = items;
+
+    if (items.length === 0) {
       list.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>Поки немає оголошень</p></div>';
+      loadMoreBtn.classList.add('hidden');
     } else {
-      list.innerHTML = anns.map(a => `
-        <div class="content-card">
-          <h3>${escapeHtml(a.title)}</h3>
-          <p>${escapeHtml(a.content)}</p>
-          <div class="meta">
-            <span>${formatDate(a.createdAt)}</span>
-            <span>${escapeHtml(a.author)}</span>
-            ${isAdmin() ? `<span style="color: var(--danger); cursor: pointer;" onclick="confirmDeleteAnnouncement('${a.id}')">🗑️</span>` : ''}
-          </div>
-        </div>
-      `).join('');
+      list.innerHTML = items.map(a => renderAnnouncementCard(a)).join('');
+      loadMoreBtn.classList.toggle('hidden', !hasMore);
     }
   } catch (e) {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><p>Помилка завантаження</p></div>';
   }
+}
+
+async function loadMoreAnnouncements() {
+  const list = document.getElementById('announcementsList');
+  const loadMoreBtn = document.getElementById('announcementsLoadMore');
+
+  try {
+    const { items, hasMore } = await getAnnouncements(true);
+    announcementsCache = [...announcementsCache, ...items];
+    list.innerHTML = announcementsCache.map(a => renderAnnouncementCard(a)).join('');
+    loadMoreBtn.classList.toggle('hidden', !hasMore);
+  } catch (e) {
+    showToast('Помилка завантаження', 'error');
+  }
+}
+
+function renderAnnouncementCard(a) {
+  return `
+    <div class="content-card">
+      <h3>${escapeHtml(a.title)}</h3>
+      <p>${escapeHtml(a.content)}</p>
+      <div class="meta">
+        <span>${formatDate(a.createdAt)}</span>
+        <span>${escapeHtml(a.author)}</span>
+        ${isAdmin() ? `<span style="color: var(--danger); cursor: pointer; margin-left: auto;" onclick="confirmDeleteAnnouncement('${a.id}')">🗑️</span>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 function confirmDeleteAnnouncement(id) {
@@ -149,7 +167,6 @@ function confirmDeleteAnnouncement(id) {
   }
 }
 
-// Кнопка додати оголошення
 document.getElementById('addAnnouncementBtn')?.addEventListener('click', function() {
   openModal('Нове оголошення', `
     <div class="form-group">
@@ -167,10 +184,7 @@ document.getElementById('addAnnouncementBtn')?.addEventListener('click', functio
 async function submitAnnouncement() {
   const title = document.getElementById('annTitle').value.trim();
   const content = document.getElementById('annContent').value.trim();
-  if (!title || !content) {
-    showToast('Заповніть всі поля', 'error');
-    return;
-  }
+  if (!title || !content) { showToast('Заповніть всі поля', 'error'); return; }
   try {
     await addAnnouncement(title, content);
     closeModal();
@@ -221,7 +235,6 @@ async function renderPolls() {
       list.innerHTML = polls.map(p => {
         const totalVotes = p.options.reduce((sum, o) => sum + (o.votes ? o.votes.length : 0), 0);
         const hasVoted = p.options.some(o => o.votes && o.votes.includes(user.apt));
-
         return `
           <div class="content-card ${!p.active ? 'poll-closed' : ''}">
             <h3>${escapeHtml(p.question)}</h3>
@@ -299,10 +312,7 @@ async function submitPoll() {
     document.getElementById('pollOpt4').value.trim()
   ].filter(o => o);
 
-  if (!question || opts.length < 2) {
-    showToast('Введіть питання та мінімум 2 варіанти', 'error');
-    return;
-  }
+  if (!question || opts.length < 2) { showToast('Введіть питання та мінімум 2 варіанти', 'error'); return; }
 
   try {
     await addPoll(question, opts);
@@ -378,12 +388,7 @@ async function submitNeighborPost() {
   const cat = document.getElementById('npCategory').value;
   const title = document.getElementById('npTitle').value.trim();
   const content = document.getElementById('npContent').value.trim();
-
-  if (!title || !content) {
-    showToast('Заповніть заголовок та опис', 'error');
-    return;
-  }
-
+  if (!title || !content) { showToast('Заповніть заголовок та опис', 'error'); return; }
   try {
     const contact = document.getElementById('npContact').value.trim();
     await addNeighborPost(cat, title, content, contact);
@@ -396,46 +401,77 @@ async function submitNeighborPost() {
 }
 
 // ---------- ПРОБЛЕМИ ----------
+let issuesCache = [];
+
 async function renderIssues() {
+  issuesCache = [];
   const list = document.getElementById('issuesList');
+  const loadMoreBtn = document.getElementById('issuesLoadMore');
   list.innerHTML = '<div class="loading-spinner" style="position: relative;"><div class="spinner"></div></div>';
 
   try {
-    const issues = await getIssues();
-    if (issues.length === 0) {
+    const { items, hasMore } = await getIssues(false);
+    issuesCache = items;
+
+    if (items.length === 0) {
       list.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><p>Проблем не зареєстровано</p></div>';
+      loadMoreBtn.classList.add('hidden');
     } else {
-      const user = getCurrentUser();
-      list.innerHTML = issues.map(i => `
-        <div class="content-card">
-          <div style="display: flex; justify-content: space-between; align-items: start;">
-            <h3>${escapeHtml(i.title)}</h3>
-            <span class="issue-status ${i.status}">${issueStatusText(i.status)}</span>
-          </div>
-          <p>${escapeHtml(i.description)}</p>
-          ${i.lastComment ? `
-            <div style="margin-top: 10px; padding: 10px; background: var(--gray-50); border-radius: 6px; font-size: 13px; border-left: 3px solid var(--primary);">
-              <strong>${escapeHtml(i.lastComment.author)}</strong>: ${escapeHtml(i.lastComment.text)}
-            </div>
-          ` : ''}
-          <div class="meta">
-            <span>${formatDate(i.createdAt)}</span>
-            <span>${escapeHtml(i.author)}</span>
-            ${user.isAdmin ? `
-              <select onchange="updateIssueStatusAction('${i.id}', this.value)" style="margin-left: auto; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--gray-300); font-size: 12px;">
-                <option value="new" ${i.status === 'new' ? 'selected' : ''}>Нове</option>
-                <option value="in-progress" ${i.status === 'in-progress' ? 'selected' : ''}>В роботі</option>
-                <option value="pending" ${i.status === 'pending' ? 'selected' : ''}>Очікує</option>
-                <option value="resolved" ${i.status === 'resolved' ? 'selected' : ''}>Вирішено</option>
-              </select>
-            ` : ''}
-          </div>
-        </div>
-      `).join('');
+      list.innerHTML = items.map(i => renderIssueCard(i)).join('');
+      loadMoreBtn.classList.toggle('hidden', !hasMore);
     }
   } catch (e) {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><p>Помилка завантаження</p></div>';
   }
+}
+
+async function loadMoreIssues() {
+  const list = document.getElementById('issuesList');
+  const loadMoreBtn = document.getElementById('issuesLoadMore');
+  try {
+    const { items, hasMore } = await getIssues(true);
+    issuesCache = [...issuesCache, ...items];
+    list.innerHTML = issuesCache.map(i => renderIssueCard(i)).join('');
+    loadMoreBtn.classList.toggle('hidden', !hasMore);
+  } catch (e) {
+    showToast('Помилка завантаження', 'error');
+  }
+}
+
+function renderIssueCard(i) {
+  const user = getCurrentUser();
+  return `
+    <div class="content-card">
+      <div style="display: flex; justify-content: space-between; align-items: start;">
+        <h3>${escapeHtml(i.title)}</h3>
+        <span class="issue-status ${i.status}">${issueStatusText(i.status)}</span>
+      </div>
+      <p style="margin-top: 6px;">${escapeHtml(i.description)}</p>
+
+      ${i.lastComment ? `
+        <div style="margin-top: 10px; padding: 10px; background: var(--gray-50); border-radius: 6px; font-size: 13px; border-left: 3px solid var(--primary);">
+          <strong>${escapeHtml(i.lastComment.author)}</strong>: ${escapeHtml(i.lastComment.text)}
+          <div style="font-size: 11px; color: var(--gray-400); margin-top: 4px;">${i.lastComment.createdAt ? new Date(i.lastComment.createdAt).toLocaleDateString('uk-UA') : ''}</div>
+        </div>
+      ` : ''}
+
+      <div class="meta" style="margin-top: 10px; flex-wrap: wrap; gap: 8px;">
+        <span>${formatDate(i.createdAt)}</span>
+        <span>${escapeHtml(i.author)}</span>
+        ${user.isAdmin ? `
+          <div style="display: flex; gap: 8px; margin-left: auto; align-items: center; flex-wrap: wrap;">
+            <select onchange="updateIssueStatusAction('${i.id}', this.value)" style="padding: 4px 8px; border-radius: 6px; border: 1px solid var(--gray-300); font-size: 12px;">
+              <option value="new" ${i.status === 'new' ? 'selected' : ''}>🟢 Нове</option>
+              <option value="in-progress" ${i.status === 'in-progress' ? 'selected' : ''}>🟡 В роботі</option>
+              <option value="pending" ${i.status === 'pending' ? 'selected' : ''}>🔴 Очікує</option>
+              <option value="resolved" ${i.status === 'resolved' ? 'selected' : ''}>✅ Вирішено</option>
+            </select>
+            <button class="btn btn-sm btn-secondary" onclick="openCommentModal('${i.id}')">💬 Коментар</button>
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  `;
 }
 
 function issueStatusText(status) {
@@ -459,6 +495,30 @@ async function updateIssueStatusAction(issueId, status) {
   }
 }
 
+// ✅ НОВЕ: модалка коментаря адміна
+function openCommentModal(issueId) {
+  openModal('Додати коментар', `
+    <div class="form-group">
+      <label>Ваш коментар для мешканця</label>
+      <textarea id="issueCommentText" class="form-input" placeholder="Наприклад: Майстер прийде у вівторок о 10:00" rows="4"></textarea>
+    </div>
+    <button onclick="submitIssueComment('${issueId}')" class="btn btn-primary btn-full">Надіслати</button>
+  `);
+}
+
+async function submitIssueComment(issueId) {
+  const text = document.getElementById('issueCommentText').value.trim();
+  if (!text) { showToast('Введіть текст коментаря', 'error'); return; }
+  try {
+    await addIssueComment(issueId, text);
+    closeModal();
+    showToast('Коментар додано', 'success');
+    renderIssues();
+  } catch (e) {
+    showToast('Помилка: ' + e.message, 'error');
+  }
+}
+
 document.getElementById('addIssueBtn')?.addEventListener('click', function() {
   openModal('Повідомити про проблему', `
     <div class="form-group">
@@ -476,12 +536,7 @@ document.getElementById('addIssueBtn')?.addEventListener('click', function() {
 async function submitIssue() {
   const title = document.getElementById('issueTitle').value.trim();
   const desc = document.getElementById('issueDesc').value.trim();
-
-  if (!title || !desc) {
-    showToast('Заповніть всі поля', 'error');
-    return;
-  }
-
+  if (!title || !desc) { showToast('Заповніть всі поля', 'error'); return; }
   try {
     await addIssue(title, desc);
     closeModal();
@@ -517,12 +572,22 @@ async function renderEvents() {
               ${e.description ? `<p style="font-size: 13px; color: var(--gray-500);">${escapeHtml(e.description)}</p>` : ''}
               ${isPast ? '<span style="font-size: 11px; color: var(--gray-400);">Минула подія</span>' : ''}
             </div>
+            ${isAdmin() ? `<button class="btn btn-sm btn-danger" onclick="confirmDeleteEvent('${e.id}')" style="align-self: center;">🗑️</button>` : ''}
           </div>
         `;
       }).join('');
     }
   } catch (e) {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><p>Помилка завантаження</p></div>';
+  }
+}
+
+function confirmDeleteEvent(id) {
+  if (confirm('Видалити подію?')) {
+    deleteEvent(id).then(() => {
+      showToast('Видалено', 'success');
+      renderEvents();
+    });
   }
 }
 
@@ -547,12 +612,7 @@ document.getElementById('addEventBtn')?.addEventListener('click', function() {
 async function submitEvent() {
   const title = document.getElementById('eventTitle').value.trim();
   const date = document.getElementById('eventDate').value;
-
-  if (!title || !date) {
-    showToast('Заповніть назву та дату', 'error');
-    return;
-  }
-
+  if (!title || !date) { showToast('Заповніть назву та дату', 'error'); return; }
   try {
     const desc = document.getElementById('eventDesc').value.trim();
     await addEvent(title, desc, date);
