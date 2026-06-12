@@ -26,16 +26,26 @@ function isSuperAdmin() {
   return user && user.isSuperAdmin === true;
 }
 
-// Визначаємо мобільний пристрій
 function isMobile() {
   return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
 }
 
+// ✅ FIX #2: Secondary Firebase App щоб НЕ змінювати сесію адміна
+// при створенні/оновленні акаунтів квартир
+function getSecondaryAuth() {
+  try {
+    return firebase.app('apt-creator').auth();
+  } catch {
+    return firebase.initializeApp(firebaseConfig, 'apt-creator').auth();
+  }
+}
+
 // Вхід через КВАРТИРУ + КОД
 async function login(buildingId, aptNumber, code) {
-  const aptStr = String(aptNumber);
+  const aptStr = String(aptNumber).trim();
   const docId = `${buildingId}__${aptStr}`;
 
+  // apartments тепер allow read: if true — читаємо ДО auth
   const aptDoc = await db.collection('apartments').doc(docId).get();
   if (!aptDoc.exists) {
     throw new Error('Невірний номер квартири або код');
@@ -43,27 +53,21 @@ async function login(buildingId, aptNumber, code) {
 
   const aptData = aptDoc.data();
 
-  // Перевірка коду: підтримка кількох мешканців
+  // Перевірка коду: загальний або індивідуальний
   let matchedResident = null;
-  let loginCode = code;
 
-  // Спочатку перевіряємо загальний код квартири
   if (aptData.code === code) {
     matchedResident = { name: aptData.name || `Квартира ${aptStr}`, code };
-  }
-  // Потім перевіряємо серед мешканців (residents array)
-  else if (Array.isArray(aptData.residents) && aptData.residents.length > 0) {
-    matchedResident = aptData.residents.find(r => r.code === code);
+  } else if (Array.isArray(aptData.residents) && aptData.residents.length > 0) {
+    matchedResident = aptData.residents.find(r => r.code === code) || null;
   }
 
   if (!matchedResident) {
     throw new Error('Невірний номер квартири або код');
   }
 
-  const residentName = matchedResident.name;
   const email = aptData.email || `apt-${buildingId}-${aptStr}@plaza-68f96.firebaseapp.com`;
-
-  // Firebase Auth завжди використовує ЗАГАЛЬНИЙ код квартири (один пароль на весь акаунт)
+  // Firebase Auth завжди використовує ЗАГАЛЬНИЙ код квартири
   const authCode = aptData.code;
 
   const buildingDoc = await db.collection('buildings').doc(buildingId).get();
@@ -73,11 +77,12 @@ async function login(buildingId, aptNumber, code) {
   try {
     userCredential = await auth.signInWithEmailAndPassword(email, authCode);
   } catch (err) {
-    const isNotFound = (
-      err.code === 'auth/user-not-found' ||
-      err.code === 'auth/invalid-credential' ||
-      err.code === 'auth/invalid-login-credentials'
-    );
+    const isNotFound = [
+      'auth/user-not-found',
+      'auth/invalid-credential',
+      'auth/invalid-login-credentials'
+    ].includes(err.code);
+
     if (isNotFound) {
       try {
         userCredential = await auth.createUserWithEmailAndPassword(email, authCode);
@@ -87,6 +92,9 @@ async function login(buildingId, aptNumber, code) {
         }
         throw new Error('Невірний номер квартири або код');
       }
+    } else if (err.code === 'auth/wrong-password') {
+      // Код у Firebase Auth застарів (адмін змінив код в Firestore але не оновив Auth)
+      throw new Error('Код доступу застарів. Зверніться до адміністратора.');
     } else {
       throw new Error('Невірний номер квартири або код');
     }
@@ -94,12 +102,12 @@ async function login(buildingId, aptNumber, code) {
 
   const user = {
     apt: aptStr,
-    buildingId: buildingId,
+    buildingId,
     buildingName: buildingData.name || 'Будинок',
     buildingAddress: buildingData.address || '',
     isAdmin: aptData.isAdmin === true,
     isSuperAdmin: false,
-    name: residentName,
+    name: matchedResident.name,
     uid: userCredential.user.uid,
     authType: 'password'
   };
@@ -113,14 +121,12 @@ async function startGoogleLogin() {
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  // На мобільному завжди використовуємо redirect
   if (isMobile()) {
     localStorage.setItem('expect_google_redirect', 'true');
     await auth.signInWithRedirect(provider);
     return null;
   }
 
-  // На десктопі — popup
   try {
     const result = await auth.signInWithPopup(provider);
     return await processGoogleUser(result.user);
@@ -137,7 +143,6 @@ async function startGoogleLogin() {
   }
 }
 
-// Спільна логіка обробки Google користувача
 async function processGoogleUser(googleUser) {
   const email = googleUser.email;
   const displayName = googleUser.displayName || email;
@@ -182,12 +187,10 @@ async function processGoogleUser(googleUser) {
   return user;
 }
 
-// Обробка Google redirect — викликається ЗАВЖДИ при старті
 async function checkGoogleRedirect() {
   try {
     const result = await auth.getRedirectResult();
     if (!result || !result.user) return null;
-
     localStorage.removeItem('expect_google_redirect');
     return await processGoogleUser(result.user);
   } catch (err) {
@@ -197,29 +200,19 @@ async function checkGoogleRedirect() {
   }
 }
 
-// Вихід — з таймаутом щоб не зависало
 async function logout() {
-  // Чистимо сесію ОДРАЗУ не чекаючи Firebase
   clearUserSession();
-
-  // Firebase signOut з таймаутом 3 секунди
   try {
     await Promise.race([
       auth.signOut(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 3000)
-      )
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
     ]);
   } catch (e) {
-    // Ігноруємо — сесія вже очищена локально
     console.log('signOut:', e.message);
   }
-
-  // Перезавантажуємо без URL параметрів
   window.location.href = window.location.pathname;
 }
 
-// Оновити UI після логіну
 function applyAuthUI(user) {
   if (!user) {
     document.getElementById('header').classList.add('hidden');
@@ -271,6 +264,7 @@ async function removeGoogleAdmin(email) {
   await db.collection('admin_emails').doc(email).delete();
 }
 
+// ✅ FIX #2: Використовуємо secondary auth щоб не зламати сесію адміна
 async function setupApartmentAccount(buildingId, aptNumber, code, isAdminFlag, name, residents) {
   const aptStr = String(aptNumber);
   const docId = `${buildingId}__${aptStr}`;
@@ -282,37 +276,29 @@ async function setupApartmentAccount(buildingId, aptNumber, code, isAdminFlag, n
     code,
     isAdmin: isAdminFlag || false,
     name: name || `Квартира ${aptStr}`,
-    email
+    email,
+    // ✅ FIX #5: завжди зберігаємо residents (навіть пустий масив)
+    residents: Array.isArray(residents) ? residents : []
   };
-  if (Array.isArray(residents) && residents.length > 0) {
-    docData.residents = residents;
-  }
 
+  // Спочатку зберігаємо в Firestore (адмін авторизований)
   await db.collection('apartments').doc(docId).set(docData);
 
-  // Зберігаємо поточного користувача (адміна) щоб розлоговуватись тільки тимчасово
-  const adminUser = auth.currentUser;
-
+  // ✅ FIX #2: Secondary auth — не змінює сесію адміна
+  const secondaryAuth = getSecondaryAuth();
   try {
-    await auth.createUserWithEmailAndPassword(email, code);
+    await secondaryAuth.createUserWithEmailAndPassword(email, code);
   } catch (err) {
     if (err.code === 'auth/email-already-in-use') {
-      try {
-        const cred = await auth.signInWithEmailAndPassword(email, code);
-        await cred.user.updatePassword(code);
-        // Повертаємо акаунт адміна (перелогінюємось назад)
-        await auth.signOut();
-        if (adminUser) {
-          // Для повернення адміна потрібен перелогін через Google
-          // Але сесія в localStorage зберігається, тому просто продовжуємо
-        }
-      } catch {
-        // код вже оновлено у Firestore — просто повертаємо адміна
-        try { await auth.signOut(); } catch {}
-      }
+      // Акаунт існує — нічого робити (код у Firestore оновлено вище)
+      // Пароль Firebase Auth оновлюється через submitApartmentEdit
+      console.log('Firebase Auth account already exists for', email);
     } else {
-      throw err;
+      // Не кидаємо помилку — Firestore вже збережено, це не критично
+      console.error('Secondary auth error:', err.message);
     }
+  } finally {
+    try { await secondaryAuth.signOut(); } catch {}
   }
 }
 
