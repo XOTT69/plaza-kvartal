@@ -13,7 +13,7 @@ if ('serviceWorker' in navigator) {
 // ===== ІНІЦІАЛІЗАЦІЯ =====
 document.addEventListener('DOMContentLoaded', async function() {
 
-  // ✅ Logout завжди реєструємо першим
+  // ✅ Logout завжди першим
   document.getElementById('logoutBtn').addEventListener('click', function(e) {
     e.preventDefault();
     if (confirm('Вийти з додатку?')) logout();
@@ -22,26 +22,37 @@ document.addEventListener('DOMContentLoaded', async function() {
   document.getElementById('loginError').classList.add('hidden');
   document.getElementById('googleLoginError').classList.add('hidden');
 
-  // 1. Перевіряємо Google redirect
+  showLoading();
+
+  // 1. ЗАВЖДИ перевіряємо Google redirect (для мобільних)
   try {
     const redirectUser = await checkGoogleRedirect();
     if (redirectUser) {
+      hideLoading();
       applyAuthUI(redirectUser);
-      navigateTo('home');
+      // Супер-адмін після логіну → одразу в адмінку → будинки
+      navigateTo('admin');
+      setTimeout(() => {
+        adminCurrentSection = 'buildings';
+        renderAdmin();
+      }, 100);
       return;
     }
   } catch (err) {
-    document.getElementById('googleLoginError').textContent = err.message;
-    document.getElementById('googleLoginError').classList.remove('hidden');
+    console.error('Redirect check error:', err);
+    // Не показуємо помилку — просто продовжуємо
   }
 
   // 2. Перевіряємо збережену сесію
   const sessionUser = getCurrentUser();
   if (sessionUser) {
+    hideLoading();
     applyAuthUI(sessionUser);
     navigateTo('home');
     return;
   }
+
+  hideLoading();
 
   // 3. Показуємо сторінку входу
   showPage('authPage');
@@ -54,7 +65,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   const urlBuildingId = getBuildingIdFromUrl();
   if (urlBuildingId) {
     const select = document.getElementById('buildingSelect');
-    if (select) {
+    if (select && select.value !== urlBuildingId) {
       select.value = urlBuildingId;
       onBuildingSelected(urlBuildingId);
     }
@@ -80,7 +91,6 @@ document.addEventListener('DOMContentLoaded', async function() {
       errorEl.classList.remove('hidden');
       return;
     }
-
     if (!aptNumber || !aptCode) {
       errorEl.textContent = 'Введіть номер квартири та код';
       errorEl.classList.remove('hidden');
@@ -112,16 +122,18 @@ document.addEventListener('DOMContentLoaded', async function() {
       hideLoading();
       if (user) {
         applyAuthUI(user);
-        navigateTo('home');
+        // Одразу в адмінку → будинки
+        navigateTo('admin');
+        setTimeout(() => {
+          adminCurrentSection = 'buildings';
+          renderAdmin();
+        }, 100);
       }
+      // Якщо null — значить redirect запущено, сторінка перезавантажиться
     } catch (err) {
       hideLoading();
-      if (err.message === 'redirect') {
-        showToast('Перенаправлення на Google...');
-      } else {
-        errorEl.textContent = err.message;
-        errorEl.classList.remove('hidden');
-      }
+      errorEl.textContent = err.message;
+      errorEl.classList.remove('hidden');
     }
   });
 
@@ -130,8 +142,17 @@ document.addEventListener('DOMContentLoaded', async function() {
     const fbUser = auth.currentUser;
     const sessionUser = getCurrentUser();
     const info = {
+      version: APP_VERSION,
       firebaseUser: fbUser ? { email: fbUser.email, uid: fbUser.uid } : null,
-      sessionUser: sessionUser ? { name: sessionUser.name, buildingId: sessionUser.buildingId, apt: sessionUser.apt } : null,
+      sessionUser: sessionUser ? {
+        name: sessionUser.name,
+        buildingId: sessionUser.buildingId,
+        apt: sessionUser.apt,
+        isAdmin: sessionUser.isAdmin,
+        isSuperAdmin: sessionUser.isSuperAdmin
+      } : null,
+      urlParam: getBuildingIdFromUrl(),
+      isMobile: isMobile()
     };
     try {
       await db.collection('buildings').limit(1).get();
@@ -144,13 +165,16 @@ document.addEventListener('DOMContentLoaded', async function() {
       const regs = await navigator.serviceWorker.getRegistrations();
       info.serviceWorkers = regs.length;
     }
-    alert(
-      '=== Діагностика v' + APP_VERSION + ' ===\n' +
-      'Firebase Auth: ' + (info.firebaseUser ? info.firebaseUser.email : 'немає') + '\n' +
-      'Сесія: ' + (info.sessionUser ? `${info.sessionUser.name} (будинок: ${info.sessionUser.buildingId}, кв: ${info.sessionUser.apt})` : 'немає') + '\n' +
-      'Firestore: ' + (info.firestoreAccess ? '✅' : '❌ ' + (info.firestoreError || '')) + '\n' +
-      'Service Workers: ' + (info.serviceWorkers !== undefined ? info.serviceWorkers : '?')
-    );
+    const msg = [
+      `=== Діагностика v${info.version} ===`,
+      `Firebase Auth: ${info.firebaseUser ? info.firebaseUser.email : 'немає'}`,
+      `Сесія: ${info.sessionUser ? `${info.sessionUser.name} | будинок: ${info.sessionUser.buildingId} | кв: ${info.sessionUser.apt} | адмін: ${info.sessionUser.isAdmin} | супер: ${info.sessionUser.isSuperAdmin}` : 'немає'}`,
+      `Firestore: ${info.firestoreAccess ? '✅' : '❌ ' + (info.firestoreError || '')}`,
+      `Мобільний: ${info.isMobile ? 'так' : 'ні'}`,
+      `URL ?b=: ${info.urlParam || 'немає'}`,
+      `Service Workers: ${info.serviceWorkers ?? '?'}`
+    ].join('\n');
+    alert(msg);
     console.log('Діагностика:', info);
   };
 
@@ -161,37 +185,44 @@ document.addEventListener('DOMContentLoaded', async function() {
 async function loadBuildingSelector() {
   const select = document.getElementById('buildingSelect');
   const aptFields = document.getElementById('aptFields');
+  const loginBtn = document.querySelector('#loginForm button[type="submit"]');
   if (!select) return;
 
   try {
     const buildings = await getBuildings();
 
     if (buildings.length === 0) {
-      select.innerHTML = '<option value="">Немає будинків — увійдіть через Google щоб створити</option>';
+      select.innerHTML = '<option value="">Будинків ще немає</option>';
       select.disabled = true;
       if (aptFields) aptFields.classList.add('hidden');
+      if (loginBtn) loginBtn.classList.add('hidden');
+
+      // Показуємо підказку
+      const hint = document.getElementById('noBuildingsHint');
+      if (hint) hint.classList.remove('hidden');
     } else {
       select.disabled = false;
-      select.innerHTML = '<option value="">— Оберіть будинок —</option>' +
-        buildings.map(b => `
-          <option value="${b.id}">
-            ${b.name}${b.address ? ' · ' + b.address : ''}
-          </option>
-        `).join('');
+      if (loginBtn) loginBtn.classList.remove('hidden');
+      const hint = document.getElementById('noBuildingsHint');
+      if (hint) hint.classList.add('hidden');
 
-      // Якщо будинок один — вибираємо автоматично
+      select.innerHTML = '<option value="">— Оберіть будинок —</option>' +
+        buildings.map(b =>
+          `<option value="${b.id}">${b.name}${b.address ? ' · ' + b.address : ''}</option>`
+        ).join('');
+
+      // Якщо один будинок — обираємо автоматично
       if (buildings.length === 1) {
         select.value = buildings[0].id;
         onBuildingSelected(buildings[0].id);
       }
     }
   } catch (e) {
-    select.innerHTML = '<option value="">Помилка завантаження будинків</option>';
+    select.innerHTML = '<option value="">Помилка завантаження</option>';
     console.error('loadBuildingSelector error:', e);
   }
 }
 
-// Показати/сховати поля квартири залежно від вибору будинку
 function onBuildingSelected(buildingId) {
   const aptFields = document.getElementById('aptFields');
   if (aptFields) {
