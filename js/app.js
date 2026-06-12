@@ -1,3 +1,22 @@
+// ===== ДЕАКТИВАЦІЯ СТАРОГО SERVICE WORKER =====
+// Видаляємо всі Service Workers та кеш
+if ('serviceWorker' in navigator) {
+  // Скасовуємо всі попередні реєстрації
+  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+    for (let registration of registrations) {
+      registration.unregister();
+    }
+  });
+  // Очищаємо весь кеш
+  if ('caches' in window) {
+    caches.keys().then(function(names) {
+      for (let name of names) {
+        caches.delete(name);
+      }
+    });
+  }
+}
+
 // ===== ГОЛОВНИЙ ФАЙЛ ІНІЦІАЛІЗАЦІЇ =====
 
 document.addEventListener('DOMContentLoaded', async function() {
@@ -113,11 +132,18 @@ document.addEventListener('DOMContentLoaded', async function() {
       info.firestoreError = e.message;
     }
 
+    // Перевірка SW
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      info.serviceWorkers = regs.length;
+    }
+
     alert(
       '=== Діагностика ===\n' +
-      'Firebase Auth: ' + (info.firebaseUser ? info.firebaseUser.email + ' (' + info.firebaseUser.providers.join(', ') + ')' : 'немає') + '\n' +
-      'Сесія: ' + (info.localStorage ? info.localStorage.name + ' (' + info.localStorage.authType + ', адмін: ' + info.localStorage.isAdmin + ')' : 'немає') + '\n' +
-      'Firestore: ' + (info.firestoreAccess ? '✅' : '❌ ' + (info.firestoreError || '')) + '\n\n' +
+      'Firebase Auth: ' + (info.firebaseUser ? info.firebaseUser.email : 'немає') + '\n' +
+      'Сесія: ' + (info.localStorage ? info.localStorage.name : 'немає') + '\n' +
+      'Firestore: ' + (info.firestoreAccess ? '✅' : '❌ ' + (info.firestoreError || '')) + '\n' +
+      'Service Workers: ' + (info.serviceWorkers !== undefined ? info.serviceWorkers : '?') + '\n\n' +
       'Відкрий консоль (F12) для деталей.'
     );
     console.log('=== Діагностика ===', info);
