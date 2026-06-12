@@ -63,37 +63,35 @@ async function login(aptNumber, code) {
   return user;
 }
 
-// Вхід через GOOGLE — використовуємо popup (працює в більшості браузерів)
+// Вхід через GOOGLE
 async function startGoogleLogin() {
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  
+
+  // Спершу пробуємо popup
   try {
     const result = await auth.signInWithPopup(provider);
-    const user = await processGoogleResult(result.user);
-    return user;
+    return await processGoogleResult(result.user);
   } catch (err) {
     if (err.code === 'auth/popup-blocked') {
       // Якщо popup заблоковано — пробуємо redirect
+      // Зберігаємо флаг, що ми очікуємо redirect
+      localStorage.setItem('expect_google_redirect', 'true');
       auth.signInWithRedirect(provider);
-      throw new Error('Спливаюче вікно заблоковане. Перенаправляємо на Google...');
+      // Кидаємо спеціальну помилку — сторінка перезавантажиться
+      throw new Error('redirect');
     }
     if (err.code === 'auth/popup-closed-by-user') {
       throw new Error('Вхід скасовано');
     }
+    // Інші помилки
     throw err;
   }
 }
 
-// Обробка результату після Google входу (і popup, і redirect)
+// Обробка результату після Google входу
 async function processGoogleResult(firebaseUser) {
   if (!firebaseUser) return null;
-  
-  // Перевіряємо, чи це Google авторизація
-  const isGoogleProvider = firebaseUser.providerData &&
-    firebaseUser.providerData.some(p => p.providerId === 'google.com');
-
-  if (!isGoogleProvider) return null;
 
   const email = firebaseUser.email;
   const displayName = firebaseUser.displayName || email;
@@ -153,6 +151,102 @@ async function processGoogleResult(firebaseUser) {
 
   saveUserSession(user);
   return user;
+}
+
+// Перевірка, чи ми повернулися з Google redirect
+async function checkGoogleRedirect() {
+  const expected = localStorage.getItem('expect_google_redirect');
+  if (!expected) return null;
+  
+  localStorage.removeItem('expect_google_redirect');
+
+  try {
+    const result = await auth.getRedirectResult();
+    if (result && result.user) {
+      return await processGoogleResult(result.user);
+    }
+  } catch (err) {
+    console.error('Google redirect error:', err);
+    throw err;
+  }
+  return null;
+}
+
+// Перевірка, чи logged in через Google (для onAuthStateChanged)
+async function handleGoogleAuthState(firebaseUser) {
+  if (!firebaseUser) return null;
+
+  // Перевіряємо, чи це Google
+  const isGoogleProvider = firebaseUser.providerData &&
+    firebaseUser.providerData.some(p => p.providerId === 'google.com');
+
+  if (!isGoogleProvider) return null;
+
+  // Якщо email є в admin_emails або це перший адмін
+  try {
+    const email = firebaseUser.email;
+    if (!email) return null;
+
+    const adminDoc = await db.collection('admin_emails').doc(email).get();
+
+    if (adminDoc.exists && adminDoc.data().isAdmin === true) {
+      // Відомий адмін — створюємо сесію
+      const user = {
+        apt: adminDoc.data().apt || 'admin',
+        isAdmin: true,
+        name: firebaseUser.displayName || email,
+        email: email,
+        uid: firebaseUser.uid,
+        authType: 'google',
+        photoURL: firebaseUser.photoURL || null
+      };
+      saveUserSession(user);
+      return user;
+    }
+
+    // Перевіряємо чи це перший взагалі
+    const allAdmins = await db.collection('admin_emails').get();
+    if (allAdmins.empty) {
+      // Перший — стає адміном
+      await db.collection('admin_emails').doc(email).set({
+        email: email,
+        name: firebaseUser.displayName || email,
+        isAdmin: true,
+        apt: 'admin',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      const adminAptRef = db.collection('apartments').doc('admin');
+      const adminAptDoc = await adminAptRef.get();
+      if (!adminAptDoc.exists) {
+        await adminAptRef.set({
+          code: 'google',
+          isAdmin: true,
+          name: firebaseUser.displayName || email,
+          email: email
+        });
+      }
+
+      const user = {
+        apt: 'admin',
+        isAdmin: true,
+        name: firebaseUser.displayName || email,
+        email: email,
+        uid: firebaseUser.uid,
+        authType: 'google',
+        photoURL: firebaseUser.photoURL || null
+      };
+      saveUserSession(user);
+      return user;
+    }
+
+    // Не в списку — виходимо
+    await auth.signOut();
+    return null;
+  } catch (err) {
+    console.error('Google auth state error:', err);
+    return null;
+  }
 }
 
 // Вихід
