@@ -10,6 +10,7 @@
 </head>
 <body>
   <div id="app">
+
     <!-- Header -->
     <header id="header" class="hidden">
       <button id="backBtn" class="btn-icon hidden" aria-label="Назад">
@@ -60,6 +61,8 @@
 
     <!-- Main Content -->
     <main id="mainContent">
+
+      <!-- СТОРІНКА ВХОДУ -->
       <div id="authPage" class="page">
         <div class="auth-container">
           <div class="auth-icon">🏠</div>
@@ -80,7 +83,12 @@
             <span>або</span>
           </div>
           <button id="googleLoginBtn" class="btn btn-google btn-full">
-            <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.77.87 7.35 2.56 10.54l7.97-5.95z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 5.95C6.51 42.62 14.62 48 24 48z"/></svg>
+            <svg width="20" height="20" viewBox="0 0 48 48">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+              <path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.77.87 7.35 2.56 10.54l7.97-5.95z"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 5.95C6.51 42.62 14.62 48 24 48z"/>
+            </svg>
             Увійти через Google
           </button>
           <p id="loginError" class="error-message hidden"></p>
@@ -91,7 +99,8 @@
         </div>
       </div>
 
-      <div id="homePage" class="page hidden">
+      <!-- ГОЛОВНА -->
+      <div id="home" class="page hidden">
         <div class="welcome-section">
           <h2 id="welcomeText">Ласкаво просимо!</h2>
           <p class="welcome-desc">Будьте в курсі подій будинку</p>
@@ -126,7 +135,8 @@
         </div>
       </div>
 
-      <div id="announcementsPage" class="page hidden">
+      <!-- ОГОЛОШЕННЯ -->
+      <div id="announcements" class="page hidden">
         <div class="page-header">
           <h2>📢 Оголошення</h2>
           <button id="addAnnouncementBtn" class="btn btn-sm admin-only hidden">+ Додати</button>
@@ -134,14 +144,16 @@
         <div id="announcementsList" class="content-list"></div>
       </div>
 
-      <div id="contactsPage" class="page hidden">
+      <!-- КОНТАКТИ -->
+      <div id="contacts" class="page hidden">
         <div class="page-header">
           <h2>🆘 Аварійні контакти</h2>
         </div>
         <div id="contactsList" class="content-list"></div>
       </div>
 
-      <div id="pollsPage" class="page hidden">
+      <!-- ГОЛОСУВАННЯ -->
+      <div id="polls" class="page hidden">
         <div class="page-header">
           <h2>🗳 Голосування</h2>
           <button id="addPollBtn" class="btn btn-sm admin-only hidden">+ Створити</button>
@@ -149,7 +161,8 @@
         <div id="pollsList" class="content-list"></div>
       </div>
 
-      <div id="neighborPostsPage" class="page hidden">
+      <!-- СУСІДСЬКІ ОГОЛОШЕННЯ -->
+      <div id="neighbor-posts" class="page hidden">
         <div class="page-header">
           <h2>📌 Сусідські оголошення</h2>
           <button id="addNeighborPostBtn" class="btn btn-sm">+ Додати</button>
@@ -157,7 +170,8 @@
         <div id="neighborPostsList" class="content-list"></div>
       </div>
 
-      <div id="issuesPage" class="page hidden">
+      <!-- ПРОБЛЕМИ -->
+      <div id="issues" class="page hidden">
         <div class="page-header">
           <h2>⚠️ Проблеми</h2>
           <button id="addIssueBtn" class="btn btn-sm">+ Повідомити</button>
@@ -165,7 +179,8 @@
         <div id="issuesList" class="content-list"></div>
       </div>
 
-      <div id="eventsPage" class="page hidden">
+      <!-- ПОДІЇ -->
+      <div id="events" class="page hidden">
         <div class="page-header">
           <h2>📅 Події</h2>
           <button id="addEventBtn" class="btn btn-sm admin-only hidden">+ Додати</button>
@@ -173,7 +188,8 @@
         <div id="eventsList" class="content-list"></div>
       </div>
 
-      <div id="adminPage" class="page hidden">
+      <!-- АДМІНКА -->
+      <div id="admin" class="page hidden">
         <div class="page-header">
           <h2>⚙️ Адмінка</h2>
         </div>
@@ -197,6 +213,7 @@
         </div>
         <div id="adminSectionContent"></div>
       </div>
+
     </main>
 
     <!-- Modal -->
@@ -218,6 +235,7 @@
     <div id="loading" class="loading-spinner hidden">
       <div class="spinner"></div>
     </div>
+
   </div>
 
   <!-- Firebase -->
