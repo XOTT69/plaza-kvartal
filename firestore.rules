@@ -12,7 +12,8 @@ service cloud.firestore {
     }
 
     match /buildings/{buildingId} {
-      allow read: if isAuth();
+      // Дозволяємо читати без авторизації (список будинків на сторінці входу)
+      allow read: if true;
       allow write: if isAdmin();
     }
 

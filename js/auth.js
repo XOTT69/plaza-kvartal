@@ -35,7 +35,6 @@ function isMobile() {
 async function login(buildingId, aptNumber, code) {
   const aptStr = String(aptNumber);
   const docId = `${buildingId}__${aptStr}`;
-  const email = `apt-${buildingId}-${aptStr}@plaza-68f96.firebaseapp.com`;
 
   const aptDoc = await db.collection('apartments').doc(docId).get();
   if (!aptDoc.exists) {
@@ -43,16 +42,36 @@ async function login(buildingId, aptNumber, code) {
   }
 
   const aptData = aptDoc.data();
-  if (aptData.code !== code) {
+
+  // Перевірка коду: підтримка кількох мешканців
+  let matchedResident = null;
+  let loginCode = code;
+
+  // Спочатку перевіряємо загальний код квартири
+  if (aptData.code === code) {
+    matchedResident = { name: aptData.name || `Квартира ${aptStr}`, code };
+  }
+  // Потім перевіряємо серед мешканців (residents array)
+  else if (Array.isArray(aptData.residents) && aptData.residents.length > 0) {
+    matchedResident = aptData.residents.find(r => r.code === code);
+  }
+
+  if (!matchedResident) {
     throw new Error('Невірний номер квартири або код');
   }
+
+  const residentName = matchedResident.name;
+  const email = aptData.email || `apt-${buildingId}-${aptStr}@plaza-68f96.firebaseapp.com`;
+
+  // Firebase Auth завжди використовує ЗАГАЛЬНИЙ код квартири (один пароль на весь акаунт)
+  const authCode = aptData.code;
 
   const buildingDoc = await db.collection('buildings').doc(buildingId).get();
   const buildingData = buildingDoc.exists ? buildingDoc.data() : { name: 'Будинок', address: '' };
 
   let userCredential;
   try {
-    userCredential = await auth.signInWithEmailAndPassword(email, code);
+    userCredential = await auth.signInWithEmailAndPassword(email, authCode);
   } catch (err) {
     const isNotFound = (
       err.code === 'auth/user-not-found' ||
@@ -61,7 +80,7 @@ async function login(buildingId, aptNumber, code) {
     );
     if (isNotFound) {
       try {
-        userCredential = await auth.createUserWithEmailAndPassword(email, code);
+        userCredential = await auth.createUserWithEmailAndPassword(email, authCode);
       } catch (createErr) {
         if (createErr.code === 'auth/email-already-in-use') {
           throw new Error('Невірний код доступу');
@@ -80,7 +99,7 @@ async function login(buildingId, aptNumber, code) {
     buildingAddress: buildingData.address || '',
     isAdmin: aptData.isAdmin === true,
     isSuperAdmin: false,
-    name: aptData.name || `Квартира ${aptStr}`,
+    name: residentName,
     uid: userCredential.user.uid,
     authType: 'password'
   };
@@ -252,19 +271,24 @@ async function removeGoogleAdmin(email) {
   await db.collection('admin_emails').doc(email).delete();
 }
 
-async function setupApartmentAccount(buildingId, aptNumber, code, isAdminFlag, name) {
+async function setupApartmentAccount(buildingId, aptNumber, code, isAdminFlag, name, residents) {
   const aptStr = String(aptNumber);
   const docId = `${buildingId}__${aptStr}`;
   const email = `apt-${buildingId}-${aptStr}@plaza-68f96.firebaseapp.com`;
 
-  await db.collection('apartments').doc(docId).set({
+  const docData = {
     buildingId,
     aptNumber: aptStr,
     code,
     isAdmin: isAdminFlag || false,
     name: name || `Квартира ${aptStr}`,
     email
-  });
+  };
+  if (Array.isArray(residents) && residents.length > 0) {
+    docData.residents = residents;
+  }
+
+  await db.collection('apartments').doc(docId).set(docData);
 
   // Зберігаємо поточного користувача (адміна) щоб розлоговуватись тільки тимчасово
   const adminUser = auth.currentUser;

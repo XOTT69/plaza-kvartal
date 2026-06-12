@@ -283,6 +283,45 @@ async function showApartmentForm(title, docId, code, isAdmin, name, buildingId, 
 
   const isEdit = !!docId;
 
+  // Завантажуємо мешканців якщо редагуємо
+  let residentsHtml = '';
+  if (isEdit) {
+    try {
+      const aptDoc = await db.collection('apartments').doc(docId).get();
+      if (aptDoc.exists) {
+        const aptData = aptDoc.data();
+        const residents = aptData.residents || [];
+        residentsHtml = `
+          <div style="margin-top: 12px; border-top: 1px solid var(--gray-200); padding-top: 12px;">
+            <label style="display: block; font-size: 14px; font-weight: 500; color: var(--gray-700); margin-bottom: 8px;">
+              👥 Мешканці (кожен може увійти зі своїм кодом)
+            </label>
+            <div id="residentsList">
+              ${residents.map((r, idx) => `
+                <div class="resident-row" style="display: flex; gap: 6px; margin-bottom: 6px; align-items: center;">
+                  <input type="text" class="resident-name form-input" value="${escapeHtml(r.name || '')}" placeholder="Ім'я" style="flex: 1; font-size: 13px; padding: 6px 8px;">
+                  <input type="text" class="resident-code form-input" value="${escapeHtml(r.code || '')}" placeholder="Код" style="width: 80px; font-size: 13px; padding: 6px 8px;">
+                  <button onclick="removeResidentRow(this)" class="btn btn-sm btn-danger" style="padding: 4px 8px; font-size: 12px;">✕</button>
+                </div>
+              `).join('')}
+            </div>
+            <button onclick="addResidentRow()" class="btn btn-sm btn-secondary" style="margin-top: 4px; font-size: 13px;">+ Додати мешканця</button>
+          </div>
+        `;
+      }
+    } catch (e) { /* ігноруємо */ }
+  } else {
+    residentsHtml = `
+      <div style="margin-top: 12px; border-top: 1px solid var(--gray-200); padding-top: 12px;">
+        <label style="display: block; font-size: 14px; font-weight: 500; color: var(--gray-700); margin-bottom: 8px;">
+          👥 Мешканці (необов'язково — кожен може увійти зі своїм кодом)
+        </label>
+        <div id="residentsList"></div>
+        <button onclick="addResidentRow()" class="btn btn-sm btn-secondary" style="margin-top: 4px; font-size: 13px;">+ Додати мешканця</button>
+      </div>
+    `;
+  }
+
   openModal(title, `
     <div class="form-group">
       <label>Будинок</label>
@@ -304,34 +343,69 @@ async function showApartmentForm(title, docId, code, isAdmin, name, buildingId, 
       >
     </div>
     <div class="form-group">
-      <label>Код доступу</label>
-      <input type="text" id="aptFieldCode" class="form-input" value="${escapeHtml(code)}" placeholder="Код для входу" autocomplete="off">
+      <label>Загальний код квартири</label>
+      <input type="text" id="aptFieldCode" class="form-input" value="${escapeHtml(code)}" placeholder="Загальний код для входу" autocomplete="off">
     </div>
     <div class="form-group">
-      <label>Назва / Ім'я мешканця (необов'язково)</label>
+      <label>Назва / Ім'я (необов'язково)</label>
       <input type="text" id="aptFieldName" class="form-input" value="${escapeHtml(name || '')}" placeholder="Квартира 15 або Іванов І.І.">
     </div>
     <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
       <input type="checkbox" id="aptFieldAdmin" ${isAdmin ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;">
       <label for="aptFieldAdmin" style="margin: 0; cursor: pointer;">Адміністратор будинку</label>
     </div>
+    ${residentsHtml}
     ${isEdit ? `<input type="hidden" id="aptFieldDocId" value="${escapeHtml(docId)}">` : ''}
     <button onclick="${isEdit ? 'submitApartmentEdit()' : 'submitApartment()'}" class="btn btn-primary btn-full" style="margin-top: 8px;">Зберегти</button>
   `);
 }
 
+// ===== МЕШКАНЦІ =====
+function addResidentRow() {
+  const list = document.getElementById('residentsList');
+  if (!list) return;
+  const row = document.createElement('div');
+  row.className = 'resident-row';
+  row.style.cssText = 'display: flex; gap: 6px; margin-bottom: 6px; align-items: center;';
+  row.innerHTML = `
+    <input type="text" class="resident-name form-input" value="" placeholder="Ім'я" style="flex: 1; font-size: 13px; padding: 6px 8px;">
+    <input type="text" class="resident-code form-input" value="" placeholder="Код" style="width: 80px; font-size: 13px; padding: 6px 8px;">
+    <button onclick="removeResidentRow(this)" class="btn btn-sm btn-danger" style="padding: 4px 8px; font-size: 12px;">✕</button>
+  `;
+  list.appendChild(row);
+  row.querySelector('.resident-name').focus();
+}
+
+function removeResidentRow(btn) {
+  const row = btn.closest('.resident-row');
+  if (row) row.remove();
+}
+
+function collectResidents() {
+  const rows = document.querySelectorAll('#residentsList .resident-row');
+  const residents = [];
+  rows.forEach(row => {
+    const name = row.querySelector('.resident-name')?.value?.trim() || '';
+    const code = row.querySelector('.resident-code')?.value?.trim() || '';
+    if (code) residents.push({ name: name || 'Мешканець', code });
+  });
+  return residents;
+}
+
+// ===== SUBMIT КВАРТИР =====
 async function submitApartment() {
   const buildingId = document.getElementById('aptFieldBuilding').value;
   const num = document.getElementById('aptFieldNum').value.trim();
   const code = document.getElementById('aptFieldCode').value.trim();
   const isAdminFlag = document.getElementById('aptFieldAdmin').checked;
   const name = document.getElementById('aptFieldName').value.trim();
+  const residents = collectResidents();
 
   if (!buildingId) { showToast('Оберіть будинок', 'error'); return; }
   if (!num || !code) { showToast('Заповніть номер та код', 'error'); return; }
 
   try {
-    await setupApartmentAccount(buildingId, num, code, isAdminFlag, name);
+    await setupApartmentAccount(buildingId, num, code, isAdminFlag, name, residents);
     closeModal();
     showToast('Квартиру збережено', 'success');
     renderAdminApartments();
@@ -345,28 +419,17 @@ async function submitApartmentEdit() {
   const code = document.getElementById('aptFieldCode').value.trim();
   const isAdminFlag = document.getElementById('aptFieldAdmin').checked;
   const name = document.getElementById('aptFieldName').value.trim();
+  const residents = collectResidents();
 
   if (!code) { showToast('Введіть код', 'error'); return; }
 
   try {
-    // Оновлюємо Firestore документ
-    await db.collection('apartments').doc(docId).update({ code, isAdmin: isAdminFlag, name });
-    
-    // Також оновлюємо пароль Firebase Auth якщо змінився
-    try {
-      const aptDoc = await db.collection('apartments').doc(docId).get();
-      if (aptDoc.exists) {
-        const aptData = aptDoc.data();
-        const email = aptData.email;
-        if (email) {
-          // Не можна змінити пароль без поточного пароля, але створимо новий запис
-          // для синхронізації при наступному вході
-        }
-      }
-    } catch (e) {
-      // Ігноруємо — Firestore вже оновлено
-    }
-    
+    await db.collection('apartments').doc(docId).update({
+      code,
+      isAdmin: isAdminFlag,
+      name,
+      residents
+    });
     closeModal();
     showToast('Збережено', 'success');
     renderAdminApartments();
