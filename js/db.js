@@ -2,24 +2,71 @@
 
 const PAGE_SIZE = 20;
 
+// ---------- БУДИНКИ ----------
+function getBuildings() {
+  return db.collection('buildings')
+    .get()
+    .then(snapshot => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      return data.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'uk'));
+    });
+}
+
+function addBuilding(code, name, address, maxApt) {
+  // Код будинку — латиниця/цифри, використовується в URL і ID квартир
+  const cleanCode = code.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!cleanCode) throw new Error('Некоректний код будинку');
+
+  return db.collection('buildings').doc(cleanCode).set({
+    code: cleanCode,
+    name: name || `Будинок ${cleanCode}`,
+    address: address || '',
+    maxApt: parseInt(maxApt) || 24,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+function updateBuilding(id, data) {
+  return db.collection('buildings').doc(id).update(data);
+}
+
+function deleteBuilding(id) {
+  return db.collection('buildings').doc(id).delete();
+}
+
+// ---------- КВАРТИРИ ----------
+function getAllApartments(buildingId) {
+  let query = db.collection('apartments');
+  if (buildingId) {
+    query = query.where('buildingId', '==', buildingId);
+  }
+  return query.get().then(snapshot => {
+    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    return data.sort((a, b) => parseInt(a.aptNumber || 0) - parseInt(b.aptNumber || 0));
+  });
+}
+
 // ---------- ОГОЛОШЕННЯ ----------
 let lastAnnouncementDoc = null;
 
 async function getAnnouncements(loadMore = false) {
+  const user = getCurrentUser();
   if (!loadMore) lastAnnouncementDoc = null;
 
-  let query = db.collection('announcements')
-    .orderBy('createdAt', 'desc')
-    .limit(PAGE_SIZE);
-
-  if (loadMore && lastAnnouncementDoc) {
-    query = query.startAfter(lastAnnouncementDoc);
+  let query;
+  if (user && user.isSuperAdmin) {
+    query = db.collection('announcements').orderBy('createdAt', 'desc');
+  } else {
+    query = db.collection('announcements')
+      .where('buildingId', '==', user.buildingId)
+      .orderBy('createdAt', 'desc');
   }
+
+  query = query.limit(PAGE_SIZE);
+  if (loadMore && lastAnnouncementDoc) query = query.startAfter(lastAnnouncementDoc);
 
   const snapshot = await query.get();
-  if (snapshot.docs.length > 0) {
-    lastAnnouncementDoc = snapshot.docs[snapshot.docs.length - 1];
-  }
+  if (snapshot.docs.length > 0) lastAnnouncementDoc = snapshot.docs[snapshot.docs.length - 1];
 
   return {
     items: snapshot.docs.map(d => ({ id: d.id, ...d.data() })),
@@ -30,10 +77,10 @@ async function getAnnouncements(loadMore = false) {
 function addAnnouncement(title, content) {
   const user = getCurrentUser();
   return db.collection('announcements').add({
-    title,
-    content,
+    title, content,
     author: user.name,
     authorApt: user.apt,
+    buildingId: user.buildingId || 'all',
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
@@ -44,20 +91,24 @@ function deleteAnnouncement(id) {
 
 // ---------- КОНТАКТИ ----------
 function getContacts() {
-  return db.collection('contacts')
-    .get()
-    .then(snapshot => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      return data.sort((a, b) => (a.order || 0) - (b.order || 0));
-    });
+  const user = getCurrentUser();
+  let query = db.collection('contacts');
+  if (user && !user.isSuperAdmin && user.buildingId) {
+    query = query.where('buildingId', '==', user.buildingId);
+  }
+  return query.get().then(snapshot => {
+    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    return data.sort((a, b) => (a.order || 0) - (b.order || 0));
+  });
 }
 
 function addContact(name, phone, category, icon) {
+  const user = getCurrentUser();
   return db.collection('contacts').add({
-    name,
-    phone,
+    name, phone,
     category: category || '',
     icon: icon || '📞',
+    buildingId: user.buildingId || 'all',
     order: Date.now()
   });
 }
@@ -72,24 +123,27 @@ function updateContact(id, data) {
 
 // ---------- ГОЛОСУВАННЯ ----------
 function getPolls() {
-  return db.collection('polls')
-    .get()
-    .then(snapshot => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      return data.sort((a, b) => {
-        const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
-        const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
-        return bTime - aTime;
-      });
+  const user = getCurrentUser();
+  let query = db.collection('polls');
+  if (user && !user.isSuperAdmin && user.buildingId) {
+    query = query.where('buildingId', '==', user.buildingId);
+  }
+  return query.get().then(snapshot => {
+    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    return data.sort((a, b) => {
+      const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
+      const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
+      return bTime - aTime;
     });
+  });
 }
 
 function addPoll(question, options) {
+  const user = getCurrentUser();
   const opts = options.map(text => ({ text, votes: [] }));
   return db.collection('polls').add({
-    question,
-    options: opts,
-    active: true,
+    question, options: opts, active: true,
+    buildingId: user.buildingId || 'all',
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
@@ -99,16 +153,13 @@ function votePoll(pollId, optionIndex, user) {
   return db.runTransaction(async transaction => {
     const doc = await transaction.get(pollRef);
     if (!doc.exists) throw new Error('Голосування не знайдено');
-
     const data = doc.data();
     const options = [...data.options];
-
     for (let i = 0; i < options.length; i++) {
       if (options[i].votes && options[i].votes.includes(user.apt)) {
         throw new Error('Ви вже проголосували');
       }
     }
-
     if (!options[optionIndex].votes) options[optionIndex].votes = [];
     options[optionIndex].votes.push(user.apt);
     transaction.update(pollRef, { options });
@@ -121,27 +172,29 @@ function closePoll(pollId) {
 
 // ---------- СУСІДСЬКІ ОГОЛОШЕННЯ ----------
 function getNeighborPosts() {
-  return db.collection('neighborPosts')
-    .get()
-    .then(snapshot => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      return data.sort((a, b) => {
-        const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
-        const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
-        return bTime - aTime;
-      });
+  const user = getCurrentUser();
+  let query = db.collection('neighborPosts');
+  if (user && !user.isSuperAdmin && user.buildingId) {
+    query = query.where('buildingId', '==', user.buildingId);
+  }
+  return query.get().then(snapshot => {
+    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    return data.sort((a, b) => {
+      const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
+      const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
+      return bTime - aTime;
     });
+  });
 }
 
 function addNeighborPost(category, title, content, contact) {
   const user = getCurrentUser();
   return db.collection('neighborPosts').add({
-    category,
-    title,
-    content,
+    category, title, content,
     contact: contact || '',
     author: user.name,
     authorApt: user.apt,
+    buildingId: user.buildingId || 'all',
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
@@ -155,29 +208,32 @@ let lastIssueDoc = null;
 
 async function getIssues(loadMore = false) {
   if (!loadMore) lastIssueDoc = null;
-
   const user = getCurrentUser();
-  let query = db.collection('issues').orderBy('createdAt', 'desc');
 
-  if (!user.isAdmin) {
+  let query;
+  if (user.isSuperAdmin) {
+    query = db.collection('issues').orderBy('createdAt', 'desc');
+  } else {
     query = db.collection('issues')
-      .where('authorApt', '==', user.apt)
+      .where('buildingId', '==', user.buildingId)
       .orderBy('createdAt', 'desc');
   }
 
   query = query.limit(PAGE_SIZE);
-
-  if (loadMore && lastIssueDoc) {
-    query = query.startAfter(lastIssueDoc);
-  }
+  if (loadMore && lastIssueDoc) query = query.startAfter(lastIssueDoc);
 
   const snapshot = await query.get();
-  if (snapshot.docs.length > 0) {
-    lastIssueDoc = snapshot.docs[snapshot.docs.length - 1];
+  if (snapshot.docs.length > 0) lastIssueDoc = snapshot.docs[snapshot.docs.length - 1];
+
+  let items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  // Звичайний мешканець бачить тільки свої проблеми
+  if (!user.isAdmin && !user.isSuperAdmin) {
+    items = items.filter(i => i.authorApt === user.apt);
   }
 
   return {
-    items: snapshot.docs.map(d => ({ id: d.id, ...d.data() })),
+    items,
     hasMore: snapshot.docs.length === PAGE_SIZE
   };
 }
@@ -185,11 +241,11 @@ async function getIssues(loadMore = false) {
 function addIssue(title, description) {
   const user = getCurrentUser();
   return db.collection('issues').add({
-    title,
-    description,
+    title, description,
     status: 'new',
     author: user.name,
     authorApt: user.apt,
+    buildingId: user.buildingId || 'all',
     comments: [],
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -207,7 +263,6 @@ function updateIssueStatus(issueId, status, comment) {
   return db.collection('issues').doc(issueId).update(updateData);
 }
 
-// ✅ НОВЕ: додати коментар адміна
 function addIssueComment(issueId, text) {
   const user = getCurrentUser();
   return db.collection('issues').doc(issueId).update({
@@ -221,45 +276,31 @@ function addIssueComment(issueId, text) {
 
 // ---------- ПОДІЇ ----------
 function getEvents() {
-  return db.collection('events')
-    .get()
-    .then(snapshot => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      return data.sort((a, b) => {
-        const aTime = a.eventDate ? (a.eventDate.toMillis ? a.eventDate.toMillis() : new Date(a.eventDate).getTime()) : 0;
-        const bTime = b.eventDate ? (b.eventDate.toMillis ? b.eventDate.toMillis() : new Date(b.eventDate).getTime()) : 0;
-        return aTime - bTime;
-      });
+  const user = getCurrentUser();
+  let query = db.collection('events');
+  if (user && !user.isSuperAdmin && user.buildingId) {
+    query = query.where('buildingId', '==', user.buildingId);
+  }
+  return query.get().then(snapshot => {
+    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    return data.sort((a, b) => {
+      const aTime = a.eventDate ? (a.eventDate.toMillis ? a.eventDate.toMillis() : new Date(a.eventDate).getTime()) : 0;
+      const bTime = b.eventDate ? (b.eventDate.toMillis ? b.eventDate.toMillis() : new Date(b.eventDate).getTime()) : 0;
+      return aTime - bTime;
     });
+  });
 }
 
 function addEvent(title, description, eventDate) {
+  const user = getCurrentUser();
   return db.collection('events').add({
-    title,
-    description,
+    title, description,
     eventDate: new Date(eventDate),
+    buildingId: user.buildingId || 'all',
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
 
 function deleteEvent(id) {
   return db.collection('events').doc(id).delete();
-}
-
-// ---------- КВАРТИРИ (АДМІН) ----------
-function getAllApartments() {
-  return db.collection('apartments')
-    .get()
-    .then(snapshot => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      return data.sort((a, b) => parseInt(a.id) - parseInt(b.id));
-    });
-}
-
-function setApartment(aptNumber, code, isAdmin, name) {
-  return db.collection('apartments').doc(String(aptNumber)).set({
-    code,
-    isAdmin: isAdmin || false,
-    name: name || `Квартира ${aptNumber}`
-  });
 }
