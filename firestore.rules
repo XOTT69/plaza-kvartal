@@ -50,6 +50,8 @@ service cloud.firestore {
     }
 
     match /admin_emails/{email} {
+      // Будь-який auth-користувач може читати (для перевірки першого входу)
+      // Write — тільки admin або сам собі (для першого Google входу)
       allow read: if isAuth();
       allow create: if isAuth() && request.auth.token.email == email;
       allow update, delete: if isAdmin();

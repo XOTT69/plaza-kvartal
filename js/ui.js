@@ -682,3 +682,27 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+// Хелпер для безпечного використання в onclick (екранує одинарні лапки)
+function escapeAttr(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/</g, '\\x3c')
+    .replace(/>/g, '\\x3e');
+}
+
+// Блокування подвійного кліку для кнопок
+function disableBtn(btn, text) {
+  if (!btn) return;
+  btn.disabled = true;
+  btn.dataset.originalText = btn.textContent;
+  btn.textContent = text || '...';
+}
+function enableBtn(btn) {
+  if (!btn) return;
+  btn.disabled = false;
+  btn.textContent = btn.dataset.originalText || btn.textContent;
+}

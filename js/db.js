@@ -54,6 +54,7 @@ let allAnnouncementsCache = [];
 
 async function getAnnouncements(loadMore = false) {
   const user = getCurrentUser();
+  if (!user) return { items: [], hasMore: false };
 
   if (!loadMore) {
     lastAnnouncementDoc = null;
@@ -92,6 +93,7 @@ async function getAnnouncements(loadMore = false) {
 
 function addAnnouncement(title, content) {
   const user = getCurrentUser();
+  if (!user) throw new Error('Необхідна авторизація');
   return db.collection('announcements').add({
     title,
     content,
@@ -121,6 +123,7 @@ function getContacts() {
 
 function addContact(name, phone, category, icon) {
   const user = getCurrentUser();
+  if (!user) throw new Error('Необхідна авторизація');
   return db.collection('contacts').add({
     name, phone,
     category: category || '',
@@ -157,6 +160,7 @@ function getPolls() {
 
 function addPoll(question, options) {
   const user = getCurrentUser();
+  if (!user) throw new Error('Необхідна авторизація');
   const opts = options.map(text => ({ text, votes: [] }));
   return db.collection('polls').add({
     question, options: opts, active: true,
@@ -206,6 +210,7 @@ function getNeighborPosts() {
 
 function addNeighborPost(category, title, content, contact) {
   const user = getCurrentUser();
+  if (!user) throw new Error('Необхідна авторизація');
   return db.collection('neighborPosts').add({
     category, title, content,
     contact: contact || '',
@@ -227,6 +232,7 @@ async function getIssues(loadMore = false) {
   if (!loadMore) allIssuesCache = [];
 
   const user = getCurrentUser();
+  if (!user) return { items: [], hasMore: false };
   let snapshot;
 
   if (user.isSuperAdmin) {
@@ -263,6 +269,7 @@ async function getIssues(loadMore = false) {
 
 function addIssue(title, description) {
   const user = getCurrentUser();
+  if (!user) throw new Error('Необхідна авторизація');
   return db.collection('issues').add({
     title, description,
     status: 'new',
@@ -288,12 +295,28 @@ function updateIssueStatus(issueId, status, comment) {
 
 function addIssueComment(issueId, text) {
   const user = getCurrentUser();
-  return db.collection('issues').doc(issueId).update({
-    lastComment: {
+  if (!user) throw new Error('Необхідна авторизація');
+  // Зберігаємо ВСІ коментарі (масив), а не лише останній
+  const issueRef = db.collection('issues').doc(issueId);
+  return db.runTransaction(async transaction => {
+    const doc = await transaction.get(issueRef);
+    if (!doc.exists) throw new Error('Проблему не знайдено');
+    const data = doc.data();
+    const comments = data.comments || [];
+    comments.push({
       text,
       author: user.name,
+      authorApt: user.apt,
       createdAt: new Date().toISOString()
-    }
+    });
+    transaction.update(issueRef, {
+      comments,
+      lastComment: {
+        text,
+        author: user.name,
+        createdAt: new Date().toISOString()
+      }
+    });
   });
 }
 
@@ -316,6 +339,7 @@ function getEvents() {
 
 function addEvent(title, description, eventDate) {
   const user = getCurrentUser();
+  if (!user) throw new Error('Необхідна авторизація');
   return db.collection('events').add({
     title, description,
     eventDate: new Date(eventDate),

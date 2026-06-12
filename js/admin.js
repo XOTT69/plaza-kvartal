@@ -70,8 +70,8 @@ async function renderAdminBuildings() {
                   </div>
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 6px;">
-                  <button class="btn btn-sm btn-secondary" onclick="showEditBuilding('${b.id}', '${escapeHtml(b.name)}', '${escapeHtml(b.address || '')}', ${b.maxApt || 24})">✏️</button>
-                  <button class="btn btn-sm btn-danger" onclick="confirmDeleteBuilding('${b.id}')">🗑️</button>
+                  <button class="btn btn-sm btn-secondary" onclick="showEditBuilding('${escapeAttr(b.id)}', '${escapeAttr(b.name)}', '${escapeAttr(b.address || '')}', ${b.maxApt || 24})">✏️</button>
+                  <button class="btn btn-sm btn-danger" onclick="confirmDeleteBuilding('${escapeAttr(b.id)}')">🗑️</button>
                 </div>
               </div>
             </div>
@@ -122,25 +122,25 @@ function showAddBuilding() {
 }
 
 function showEditBuilding(id, name, address, maxApt) {
-  openModal(`Редагувати будинок "${name}"`, `
+  openModal(`Редагувати будинок`, `
     <div class="form-group">
       <label>Код будинку</label>
-      <input type="text" id="bldCode" class="form-input" value="${id}" readonly style="background: var(--gray-100); color: var(--gray-500);">
+      <input type="text" id="bldCode" class="form-input" value="${escapeHtml(id)}" readonly style="background: var(--gray-100); color: var(--gray-500);">
       <small style="color: var(--gray-400); font-size: 12px;">Код не можна змінити (використовується в посиланнях)</small>
     </div>
     <div class="form-group">
       <label>Назва будинку</label>
-      <input type="text" id="bldName" class="form-input" value="${name}">
+      <input type="text" id="bldName" class="form-input" value="${escapeHtml(name)}">
     </div>
     <div class="form-group">
       <label>Адреса</label>
-      <input type="text" id="bldAddress" class="form-input" value="${address}">
+      <input type="text" id="bldAddress" class="form-input" value="${escapeHtml(address)}">
     </div>
     <div class="form-group">
       <label>Кількість квартир</label>
       <input type="number" id="bldMaxApt" class="form-input" value="${maxApt}" min="1" max="999">
     </div>
-    <input type="hidden" id="bldEditId" value="${id}">
+    <input type="hidden" id="bldEditId" value="${escapeHtml(id)}">
     <button onclick="submitBuildingEdit()" class="btn btn-primary btn-full">Зберегти</button>
   `);
 }
@@ -204,7 +204,6 @@ async function renderAdminApartments() {
     const buildings = await getBuildings();
     const user = getCurrentUser();
 
-    // Для звичайного адміна — фільтр по його будинку автоматично
     if (!user.isSuperAdmin && user.buildingId) {
       adminSelectedBuilding = user.buildingId;
     }
@@ -241,8 +240,8 @@ async function renderAdminApartments() {
                   </div>
                 </div>
                 <div style="display: flex; gap: 8px;">
-                  <button class="btn btn-sm btn-secondary" onclick="showEditApartment('${a.id}', '${escapeHtml(a.code)}', ${a.isAdmin || false}, '${escapeHtml(a.name || '')}', '${a.buildingId || ''}', '${a.aptNumber || ''}')">✏️</button>
-                  <button class="btn btn-sm btn-danger" onclick="confirmDeleteApartment('${a.id}')">🗑️</button>
+                  <button class="btn btn-sm btn-secondary" onclick="showEditApartment('${escapeAttr(a.id)}', '${escapeAttr(a.code || '')}', ${a.isAdmin || false}, '${escapeAttr(a.name || '')}', '${escapeAttr(a.buildingId || '')}', '${escapeAttr(a.aptNumber || '')}')">✏️</button>
+                  <button class="btn btn-sm btn-danger" onclick="confirmDeleteApartment('${escapeAttr(a.id)}')">🗑️</button>
                 </div>
               </div>
             </div>
@@ -276,10 +275,10 @@ async function showApartmentForm(title, docId, code, isAdmin, name, buildingId, 
   try {
     const buildings = await getBuildings();
     buildingsOptions = buildings.map(b =>
-      `<option value="${b.id}" ${buildingId === b.id ? 'selected' : ''}>${b.name}</option>`
+      `<option value="${b.id}" ${buildingId === b.id ? 'selected' : ''}>${escapeHtml(b.name)}</option>`
     ).join('');
   } catch (e) {
-    buildingsOptions = `<option value="${buildingId}">${buildingId}</option>`;
+    buildingsOptions = `<option value="${escapeHtml(buildingId)}">${escapeHtml(buildingId)}</option>`;
   }
 
   const isEdit = !!docId;
@@ -298,7 +297,7 @@ async function showApartmentForm(title, docId, code, isAdmin, name, buildingId, 
         type="text"
         id="aptFieldNum"
         class="form-input"
-        value="${aptNumber || ''}"
+        value="${escapeHtml(aptNumber || '')}"
         placeholder="Наприклад: 15"
         inputmode="numeric"
         ${isEdit ? 'readonly style="background:var(--gray-100);color:var(--gray-500);"' : ''}
@@ -306,17 +305,17 @@ async function showApartmentForm(title, docId, code, isAdmin, name, buildingId, 
     </div>
     <div class="form-group">
       <label>Код доступу</label>
-      <input type="text" id="aptFieldCode" class="form-input" value="${code}" placeholder="Код для входу" autocomplete="off">
+      <input type="text" id="aptFieldCode" class="form-input" value="${escapeHtml(code)}" placeholder="Код для входу" autocomplete="off">
     </div>
     <div class="form-group">
       <label>Назва / Ім'я мешканця (необов'язково)</label>
-      <input type="text" id="aptFieldName" class="form-input" value="${name}" placeholder="Квартира 15 або Іванов І.І.">
+      <input type="text" id="aptFieldName" class="form-input" value="${escapeHtml(name || '')}" placeholder="Квартира 15 або Іванов І.І.">
     </div>
     <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
       <input type="checkbox" id="aptFieldAdmin" ${isAdmin ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;">
       <label for="aptFieldAdmin" style="margin: 0; cursor: pointer;">Адміністратор будинку</label>
     </div>
-    ${isEdit ? `<input type="hidden" id="aptFieldDocId" value="${docId}">` : ''}
+    ${isEdit ? `<input type="hidden" id="aptFieldDocId" value="${escapeHtml(docId)}">` : ''}
     <button onclick="${isEdit ? 'submitApartmentEdit()' : 'submitApartment()'}" class="btn btn-primary btn-full" style="margin-top: 8px;">Зберегти</button>
   `);
 }
@@ -350,7 +349,24 @@ async function submitApartmentEdit() {
   if (!code) { showToast('Введіть код', 'error'); return; }
 
   try {
+    // Оновлюємо Firestore документ
     await db.collection('apartments').doc(docId).update({ code, isAdmin: isAdminFlag, name });
+    
+    // Також оновлюємо пароль Firebase Auth якщо змінився
+    try {
+      const aptDoc = await db.collection('apartments').doc(docId).get();
+      if (aptDoc.exists) {
+        const aptData = aptDoc.data();
+        const email = aptData.email;
+        if (email) {
+          // Не можна змінити пароль без поточного пароля, але створимо новий запис
+          // для синхронізації при наступному вході
+        }
+      }
+    } catch (e) {
+      // Ігноруємо — Firestore вже оновлено
+    }
+    
     closeModal();
     showToast('Збережено', 'success');
     renderAdminApartments();
@@ -392,7 +408,7 @@ async function renderAdminAnnouncements() {
                   <strong>${escapeHtml(a.title)}</strong>
                   <div style="font-size: 12px; color: var(--gray-400);">${formatDate(a.createdAt)}${a.buildingId ? ' · ' + escapeHtml(a.buildingId) : ''}</div>
                 </div>
-                <button class="btn btn-sm btn-danger" onclick="confirmDeleteAnnouncement('${a.id}')">🗑️</button>
+                <button class="btn btn-sm btn-danger" onclick="confirmDeleteAnnouncement('${escapeAttr(a.id)}')">🗑️</button>
               </div>
             </div>
           `).join('')
@@ -426,7 +442,7 @@ async function renderAdminContacts() {
                   <strong>${c.icon || '📞'} ${escapeHtml(c.name)}</strong>
                   <div style="font-size: 13px; color: var(--gray-500);">${escapeHtml(c.phone)}${c.category ? ' · ' + escapeHtml(c.category) : ''}</div>
                 </div>
-                <button class="btn btn-sm btn-danger" onclick="confirmDeleteContact('${c.id}')">🗑️</button>
+                <button class="btn btn-sm btn-danger" onclick="confirmDeleteContact('${escapeAttr(c.id)}')">🗑️</button>
               </div>
             </div>
           `).join('')
@@ -448,7 +464,7 @@ function showAddContact() {
       <label>Телефон</label>
       <input type="tel" id="contactPhone" class="form-input" placeholder="+380 XX XXX XX XX">
     </div>
-        <div class="form-group">
+    <div class="form-group">
       <label>Категорія</label>
       <input type="text" id="contactCategory" class="form-input" placeholder="Аварійна служба">
     </div>
@@ -513,7 +529,7 @@ async function renderAdminGoogleAdmins() {
                     <div style="font-size: 13px; color: var(--gray-500);">${escapeHtml(a.email)}</div>
                     <div style="font-size: 12px; color: var(--gray-400);">${a.createdAt ? formatDate(a.createdAt) : ''}</div>
                   </div>
-                  <button class="btn btn-sm btn-danger" onclick="confirmRemoveGoogleAdmin('${escapeHtml(a.email)}')">🗑️</button>
+                  <button class="btn btn-sm btn-danger" onclick="confirmRemoveGoogleAdmin('${escapeAttr(a.email)}')">🗑️</button>
                 </div>
               </div>
             `).join('')

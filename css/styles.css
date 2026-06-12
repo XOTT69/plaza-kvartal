@@ -60,6 +60,18 @@ body {
 
 /* ========== UTILITY ========== */
 .hidden { display: none !important; }
+/* Side menu використовує окремий клас для show/hide щоб анімація працювала */
+.side-menu.hidden {
+  display: flex !important;
+  transform: translateX(-100%);
+  pointer-events: none;
+  visibility: hidden;
+}
+.side-menu:not(.hidden) {
+  transform: translateX(0);
+  pointer-events: auto;
+  visibility: visible;
+}
 
 /* ========== HEADER ========== */
 header {
@@ -122,13 +134,6 @@ header h1 {
   transition: transform 0.3s ease;
 }
 
-.side-menu.hidden {
-  transform: translateX(-100%);
-}
-
-.side-menu:not(.hidden) {
-  transform: translateX(0);
-}
 
 .side-menu-header {
   display: flex;
@@ -998,6 +1003,132 @@ textarea.form-input {
   background: var(--gray-50);
   min-width: 0;
   color: var(--gray-600);
+}
+
+/* ========== DARK MODE ========== */
+/* Автоматично за системною темою */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --gray-50: #0f172a;
+    --gray-100: #1e293b;
+    --gray-200: #334155;
+    --gray-300: #475569;
+    --gray-400: #64748b;
+    --gray-500: #94a3b8;
+    --gray-600: #cbd5e1;
+    --gray-700: #e2e8f0;
+    --gray-800: #f1f5f9;
+    --gray-900: #f8fafc;
+  }
+}
+/* Ручний тогл через клас .dark */
+html.dark {
+  --gray-50: #0f172a;
+  --gray-100: #1e293b;
+  --gray-200: #334155;
+  --gray-300: #475569;
+  --gray-400: #64748b;
+  --gray-500: #94a3b8;
+  --gray-600: #cbd5e1;
+  --gray-700: #e2e8f0;
+  --gray-800: #f1f5f9;
+  --gray-900: #f8fafc;
+}
+html.dark body { background: var(--gray-50); color: var(--gray-900); }
+html.dark #app { background: var(--gray-50); }
+html.dark .content-card { background: var(--gray-100); border-color: var(--gray-200); }
+html.dark .contact-card { background: var(--gray-100); border-color: var(--gray-200); }
+html.dark .event-card { background: var(--gray-100); border-color: var(--gray-200); }
+html.dark .admin-card { background: var(--gray-100); border-color: var(--gray-200); }
+html.dark .widget { background: var(--gray-100); }
+html.dark .quick-action-card { background: var(--gray-100); }
+html.dark .modal-content { background: var(--gray-100); }
+html.dark .modal-header { background: var(--gray-100); border-color: var(--gray-200); }
+html.dark .form-input { background: var(--gray-100); border-color: var(--gray-200); color: var(--gray-900); }
+html.dark .btn-google { background: var(--gray-100); border-color: var(--gray-200); color: var(--gray-700); }
+html.dark .poll-option button { background: var(--gray-100); border-color: var(--gray-200); color: var(--gray-900); }
+html.dark .side-menu { background: var(--gray-100); }
+html.dark .side-menu-header { border-color: var(--gray-200); }
+html.dark .menu-item { color: var(--gray-700); }
+html.dark .search-bar { background: var(--gray-100); }
+html.dark .search-bar:focus-within { background: var(--gray-100); }
+
+/* Тогл темної теми */
+.theme-toggle {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  box-shadow: var(--shadow-md);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s;
+}
+.theme-toggle:active { transform: scale(0.9); }
+
+/* ========== SEARCH BAR ========== */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--gray-100);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border: 2px solid transparent;
+  transition: border-color 0.2s;
+}
+.search-bar:focus-within {
+  border-color: var(--primary);
+  background: white;
+}
+.search-bar input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  outline: none;
+  color: var(--gray-900);
+}
+.search-bar .search-icon {
+  font-size: 18px;
+  color: var(--gray-400);
+}
+
+/* ========== PULL TO REFRESH ========== */
+.ptr-indicator {
+  text-align: center;
+  padding: 12px;
+  color: var(--gray-400);
+  font-size: 13px;
+  display: none;
+}
+
+/* ========== BADGE NOTIFICATION ========== */
+.notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  background: var(--danger);
+  color: white;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
 }
 
 /* ========== RESPONSIVE ========== */

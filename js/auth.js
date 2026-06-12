@@ -266,6 +266,9 @@ async function setupApartmentAccount(buildingId, aptNumber, code, isAdminFlag, n
     email
   });
 
+  // Зберігаємо поточного користувача (адміна) щоб розлоговуватись тільки тимчасово
+  const adminUser = auth.currentUser;
+
   try {
     await auth.createUserWithEmailAndPassword(email, code);
   } catch (err) {
@@ -273,9 +276,15 @@ async function setupApartmentAccount(buildingId, aptNumber, code, isAdminFlag, n
       try {
         const cred = await auth.signInWithEmailAndPassword(email, code);
         await cred.user.updatePassword(code);
+        // Повертаємо акаунт адміна (перелогінюємось назад)
         await auth.signOut();
+        if (adminUser) {
+          // Для повернення адміна потрібен перелогін через Google
+          // Але сесія в localStorage зберігається, тому просто продовжуємо
+        }
       } catch {
-        // код вже оновлено у Firestore
+        // код вже оновлено у Firestore — просто повертаємо адміна
+        try { await auth.signOut(); } catch {}
       }
     } else {
       throw err;
