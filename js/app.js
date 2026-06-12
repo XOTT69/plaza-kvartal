@@ -1,35 +1,39 @@
 // ===== ГОЛОВНИЙ ФАЙЛ ІНІЦІАЛІЗАЦІЇ =====
 
 document.addEventListener('DOMContentLoaded', async function() {
-  // 1. Спочатку обробляємо Google redirect (якщо повернулися з Google)
-  const googleErrorEl = document.getElementById('googleLoginError');
-  
-  try {
-    const googleUser = await handleGoogleRedirectResult();
-    if (googleUser) {
-      // Успішний вхід через Google
-      document.getElementById('header').classList.remove('hidden');
-      document.getElementById('welcomeText').textContent = `Ласкаво просимо, ${googleUser.name}!`;
-      if (googleUser.isAdmin) {
-        document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
-      }
-      document.getElementById('userInfo').textContent = `${googleUser.name}${googleUser.isAdmin ? ' (Адмін)' : ''}`;
-      navigateTo('home');
-      return;
-    }
-  } catch (err) {
-    googleErrorEl.textContent = err.message;
-    googleErrorEl.classList.remove('hidden');
-  }
+  // Сховати помилки
+  document.getElementById('loginError').classList.add('hidden');
+  document.getElementById('googleLoginError').classList.add('hidden');
 
-  // 2. Перевіряємо, чи є збережена сесія
-  const user = checkAuth();
-  if (user) {
+  // 1. Перевіряємо, чи є збережена сесія з попереднього разу
+  const sessionUser = getCurrentUser();
+  if (sessionUser) {
+    applyAuthUI(sessionUser);
     navigateTo('home');
     return;
   }
 
-  // 3. Обробка форми входу по квартирі
+  // 2. Також перевіряємо Firebase Auth (може бути активна сесія)
+  if (auth.currentUser) {
+    try {
+      const user = await processGoogleResult(auth.currentUser);
+      if (user) {
+        applyAuthUI(user);
+        navigateTo('home');
+        return;
+      }
+    } catch (err) {
+      console.error('Session restore error:', err);
+    }
+  }
+
+  // 3. Нічого немає — показуємо сторінку входу
+  showPage('authPage');
+  document.getElementById('header').classList.add('hidden');
+
+  // --- Події ---
+
+  // Вхід по квартирі
   document.getElementById('loginForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const aptNumber = document.getElementById('aptNumber').value.trim();
@@ -48,18 +52,9 @@ document.addEventListener('DOMContentLoaded', async function() {
       showLoading();
       const user = await login(aptNumber, aptCode);
       hideLoading();
-
-      document.getElementById('header').classList.remove('hidden');
-      document.getElementById('welcomeText').textContent = `Ласкаво просимо, ${user.name}!`;
-
-      if (user.isAdmin) {
-        document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
-      }
-
-      document.getElementById('userInfo').textContent = `${user.name}${user.isAdmin ? ' (Адмін)' : ''}`;
+      applyAuthUI(user);
       document.getElementById('aptNumber').value = '';
       document.getElementById('aptCode').value = '';
-
       navigateTo('home');
     } catch (err) {
       hideLoading();
@@ -68,12 +63,37 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
-  // 4. Google вхід (через redirect — працює на мобільних та PWA)
-  document.getElementById('googleLoginBtn').addEventListener('click', function() {
-    startGoogleLogin();
+  // Google вхід (popup, з fallback на redirect)
+  document.getElementById('googleLoginBtn').addEventListener('click', async function() {
+    const errorEl = document.getElementById('googleLoginError');
+    errorEl.classList.add('hidden');
+
+    try {
+      showLoading();
+      const user = await startGoogleLogin();
+      hideLoading();
+
+      if (user) {
+        applyAuthUI(user);
+        navigateTo('home');
+      }
+    } catch (err) {
+      hideLoading();
+      errorEl.textContent = err.message;
+      errorEl.classList.remove('hidden');
+      console.error('Google login error:', err);
+    }
   });
 
-  // 5. Service Worker для PWA
+  // Вихід
+  document.getElementById('logoutBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    if (confirm('Вийти з додатку?')) {
+      logout();
+    }
+  });
+
+  // Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
       .then(() => console.log('SW registered'))

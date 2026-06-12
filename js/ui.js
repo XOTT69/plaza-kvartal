@@ -46,13 +46,6 @@ document.getElementById('menuOverlay').addEventListener('click', closeMenu);
 document.getElementById('modalOverlay').addEventListener('click', closeModal);
 document.querySelector('.modal-close').addEventListener('click', closeModal);
 
-document.getElementById('logoutBtn').addEventListener('click', function(e) {
-  e.preventDefault();
-  if (confirm('Вийти з додатку?')) {
-    logout();
-  }
-});
-
 // ---------- ГОЛОВНА ----------
 async function renderHome() {
   // Останні оголошення
