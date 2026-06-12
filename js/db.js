@@ -3,9 +3,15 @@
 // ---------- ОГОЛОШЕННЯ ----------
 function getAnnouncements() {
   return db.collection('announcements')
-    .orderBy('createdAt', 'desc')
     .get()
-    .then(snapshot => snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    .then(snapshot => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      return data.sort((a, b) => {
+        const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
+        const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
+        return bTime - aTime;
+      });
+    });
 }
 
 function addAnnouncement(title, content) {
@@ -26,9 +32,11 @@ function deleteAnnouncement(id) {
 // ---------- КОНТАКТИ ----------
 function getContacts() {
   return db.collection('contacts')
-    .orderBy('order', 'asc')
     .get()
-    .then(snapshot => snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    .then(snapshot => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      return data.sort((a, b) => (a.order || 0) - (b.order || 0));
+    });
 }
 
 function addContact(name, phone, category, icon) {
@@ -52,9 +60,15 @@ function updateContact(id, data) {
 // ---------- ГОЛОСУВАННЯ ----------
 function getPolls() {
   return db.collection('polls')
-    .orderBy('createdAt', 'desc')
     .get()
-    .then(snapshot => snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    .then(snapshot => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      return data.sort((a, b) => {
+        const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
+        const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
+        return bTime - aTime;
+      });
+    });
 }
 
 function addPoll(question, options) {
@@ -102,9 +116,15 @@ function closePoll(pollId) {
 // ---------- СУСІДСЬКІ ОГОЛОШЕННЯ ----------
 function getNeighborPosts() {
   return db.collection('neighborPosts')
-    .orderBy('createdAt', 'desc')
     .get()
-    .then(snapshot => snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    .then(snapshot => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      return data.sort((a, b) => {
+        const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
+        const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
+        return bTime - aTime;
+      });
+    });
 }
 
 function addNeighborPost(category, title, content, contact) {
@@ -127,20 +147,20 @@ function deleteNeighborPost(id) {
 // ---------- ПРОБЛЕМИ ----------
 function getIssues() {
   const user = getCurrentUser();
-  let query = db.collection('issues').orderBy('createdAt', 'desc');
+  let query = db.collection('issues');
 
   if (!user.isAdmin) {
     query = query.where('authorApt', '==', user.apt);
   }
 
-  return query.get().then(snapshot => snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-}
-
-function getAllIssues() {
-  return db.collection('issues')
-    .orderBy('createdAt', 'desc')
-    .get()
-    .then(snapshot => snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  return query.get().then(snapshot => {
+    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    return data.sort((a, b) => {
+      const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
+      const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
+      return bTime - aTime;
+    });
+  });
 }
 
 function addIssue(title, description) {
@@ -148,7 +168,7 @@ function addIssue(title, description) {
   return db.collection('issues').add({
     title,
     description,
-    status: 'new', // new, in-progress, pending, resolved
+    status: 'new',
     author: user.name,
     authorApt: user.apt,
     comments: [],
@@ -171,9 +191,15 @@ function updateIssueStatus(issueId, status, comment) {
 // ---------- ПОДІЇ ----------
 function getEvents() {
   return db.collection('events')
-    .orderBy('eventDate', 'asc')
     .get()
-    .then(snapshot => snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    .then(snapshot => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      return data.sort((a, b) => {
+        const aTime = a.eventDate ? (a.eventDate.toMillis ? a.eventDate.toMillis() : new Date(a.eventDate).getTime()) : 0;
+        const bTime = b.eventDate ? (b.eventDate.toMillis ? b.eventDate.toMillis() : new Date(b.eventDate).getTime()) : 0;
+        return aTime - bTime;
+      });
+    });
 }
 
 function addEvent(title, description, eventDate) {
@@ -192,9 +218,11 @@ function deleteEvent(id) {
 // ---------- КВАРТИРИ (АДМІН) ----------
 function getAllApartments() {
   return db.collection('apartments')
-    .orderBy('__name__')
     .get()
-    .then(snapshot => snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    .then(snapshot => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      return data.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+    });
 }
 
 function setApartment(aptNumber, code, isAdmin, name) {

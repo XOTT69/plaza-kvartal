@@ -1,99 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // === КВАРТИРИ ===
-    // Квартиру можна читати (крім поля code, якщо це не адмін)
-    // Тільки адмін може писати
-    match /apartments/{aptId} {
-      allow read: if request.auth != null && (
-        aptId == request.auth.uid.split('apt-')[1]  // своя квартира
-        || isAdmin(request.auth)
-      );
-      allow write: if request.auth != null && isAdmin(request.auth);
-    }
-
-    // === GOOGLE АДМІНИ ===
-    // Перший запис може створити будь-хто (автореєстрація)
-    // Далі — тільки адміни
-    match /admin_emails/{email} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && (
-        // Перший адмін автоматично
-        get(/databases/$(database)/documents/admin_emails).size == 0
-        // Або існуючий адмін додає
-        || isAdmin(request.auth)
-      );
-      allow delete: if request.auth != null && isAdmin(request.auth);
-      allow update: if request.auth != null && isAdmin(request.auth);
-    }
-
-    // === ОГОЛОШЕННЯ ===
-    match /announcements/{docId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && isAdmin(request.auth);
-    }
-
-    // === КОНТАКТИ ===
-    match /contacts/{docId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && isAdmin(request.auth);
-    }
-
-    // === ГОЛОСУВАННЯ ===
-    match /polls/{docId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && isAdmin(request.auth);
-      allow update: if request.auth != null;
-      allow delete: if request.auth != null && isAdmin(request.auth);
-    }
-
-    // === СУСІДСЬКІ ОГОЛОШЕННЯ ===
-    match /neighborPosts/{docId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow delete: if request.auth != null && (
-        resource.data.authorApt == request.auth.uid.split('apt-')[1]
-        || isAdmin(request.auth)
-      );
-      allow update: if request.auth != null && isAdmin(request.auth);
-    }
-
-    // === ПРОБЛЕМИ ===
-    match /issues/{docId} {
-      allow read: if request.auth != null && (
-        resource.data.authorApt == request.auth.uid.split('apt-')[1]
-        || isAdmin(request.auth)
-      );
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && (
-        resource.data.authorApt == request.auth.uid.split('apt-')[1]
-        || isAdmin(request.auth)
-      );
-      allow delete: if request.auth != null && isAdmin(request.auth);
-    }
-
-    // === ПОДІЇ ===
-    match /events/{docId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && isAdmin(request.auth);
-    }
-
-    // Функція перевірки адміна
-    function isAdmin(request) {
-      // Перевірка через UID (квартирний вхід)
-      let aptNumber = request.auth.uid.split('apt-')[1];
-      let isAptAdmin = aptNumber && aptNumber.length > 0 && aptNumber.length <= 2
-        ? get(/databases/$(database)/documents/apartments/$(aptNumber)).data.isAdmin == true
-        : false;
-
-      // Перевірка через email (Google вхід)
-      let email = request.auth.token.email;
-      let isEmailAdmin = email != null
-        ? get(/databases/$(database)/documents/admin_emails/$(email)).data.isAdmin == true
-        : false;
-
-      return isAptAdmin || isEmailAdmin;
+    // ⚠️ ТЕСТОВИЙ РЕЖИМ: будь-хто авторизований може читати/писати
+    // Потім посилити правила!
+    match /{document=**} {
+      allow read, write: if request.auth != null;
     }
   }
 }

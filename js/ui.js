@@ -48,14 +48,30 @@ document.querySelector('.modal-close').addEventListener('click', closeModal);
 
 // ---------- ГОЛОВНА ----------
 async function renderHome() {
+  const user = getCurrentUser();
+  
+  // Якщо адмін і даних немає — показуємо підказку
+  const annList = document.getElementById('homeAnnouncementsList');
+  const issueList = document.getElementById('homeIssuesList');
+
   // Останні оголошення
   try {
-    const anns = await getAnnouncements();
-    const list = document.getElementById('homeAnnouncementsList');
+    const anns = await db.collection('announcements').get().then(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
     if (anns.length === 0) {
-      list.innerHTML = '<p class="empty-state" style="padding: 16px 0;"><span class="empty-icon">📭</span><br>Поки немає оголошень</p>';
+      if (user && user.isAdmin) {
+        annList.innerHTML = `
+          <div class="content-card" style="margin-bottom: 8px; border: 2px dashed var(--primary-light); text-align: center; padding: 20px;">
+            <p style="font-size: 14px; color: var(--gray-500);">
+              📭 Оголошень поки немає<br>
+              <span style="font-size: 12px;">Перейдіть в <a href="#" data-page="announcements" style="color: var(--primary);">Оголошення</a> щоб створити перше</span>
+            </p>
+          </div>
+        `;
+      } else {
+        annList.innerHTML = '<p class="empty-state" style="padding: 16px 0;"><span class="empty-icon">📭</span><br>Поки немає оголошень</p>';
+      }
     } else {
-      list.innerHTML = anns.slice(0, 3).map(a => `
+      annList.innerHTML = anns.sort((a,b) => (b.createdAt?.toMillis?.()||0) - (a.createdAt?.toMillis?.()||0)).slice(0, 3).map(a => `
         <div class="content-card" style="margin-bottom: 8px; cursor: pointer;" onclick="navigateTo('announcements')">
           <h3>${escapeHtml(a.title)}</h3>
           <p>${escapeHtml(a.content).substring(0, 80)}${a.content.length > 80 ? '...' : ''}</p>
@@ -65,16 +81,25 @@ async function renderHome() {
     }
   } catch (e) {
     console.error('Home announcements error:', e);
+    annList.innerHTML = '<p style="color: var(--danger); font-size: 13px; padding: 10px;">Помилка завантаження</p>';
   }
 
   // Мої проблеми
   try {
-    const issues = await getIssues();
-    const list = document.getElementById('homeIssuesList');
+    let issuesQuery = db.collection('issues');
+    if (!user || !user.isAdmin) {
+      issuesQuery = issuesQuery.where('authorApt', '==', user?.apt || 'none');
+    }
+    const issues = await issuesQuery.get().then(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
+    
     if (issues.length === 0) {
-      list.innerHTML = '<p class="empty-state" style="padding: 16px 0;"><span class="empty-icon">✅</span><br>Немає проблем</p>';
+      issueList.innerHTML = `
+        <p class="empty-state" style="padding: 16px 0;">
+          <span class="empty-icon">✅</span><br>
+          ${user && user.isAdmin ? 'Проблем від мешканців поки немає' : 'У вас немає проблем'}
+        </p>`;
     } else {
-      list.innerHTML = issues.slice(0, 3).map(i => `
+      issueList.innerHTML = issues.sort((a,b) => (b.createdAt?.toMillis?.()||0) - (a.createdAt?.toMillis?.()||0)).slice(0, 3).map(i => `
         <div class="content-card" style="margin-bottom: 8px;">
           <h3>${escapeHtml(i.title)}</h3>
           <span class="issue-status ${i.status}">${issueStatusText(i.status)}</span>
@@ -84,6 +109,7 @@ async function renderHome() {
     }
   } catch (e) {
     console.error('Home issues error:', e);
+    issueList.innerHTML = '<p style="color: var(--danger); font-size: 13px; padding: 10px;">Помилка завантаження</p>';
   }
 }
 
