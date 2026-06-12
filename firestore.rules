@@ -11,6 +11,11 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admin_emails/$(request.auth.token.email));
     }
 
+    match /buildings/{buildingId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
     match /apartments/{aptId} {
       allow read: if isAuth();
       allow write: if isAdmin();
