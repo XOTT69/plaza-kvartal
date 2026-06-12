@@ -1,4 +1,6 @@
 // ===== РОБОТА З FIRESTORE =====
+// Всі фільтровані запити — без orderBy (уникаємо composite index)
+// Сортування відбувається на клієнті
 
 const PAGE_SIZE = 20;
 
@@ -13,9 +15,8 @@ function getBuildings() {
 }
 
 function addBuilding(code, name, address, maxApt) {
-  // Код будинку — латиниця/цифри, використовується в URL і ID квартир
   const cleanCode = code.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (!cleanCode) throw new Error('Некоректний код будинку');
+  if (!cleanCode) throw new Error('Код будинку може містити лише латинські літери та цифри');
 
   return db.collection('buildings').doc(cleanCode).set({
     code: cleanCode,
@@ -47,37 +48,53 @@ function getAllApartments(buildingId) {
 }
 
 // ---------- ОГОЛОШЕННЯ ----------
+// Без composite index — фільтруємо на клієнті
 let lastAnnouncementDoc = null;
+let allAnnouncementsCache = [];
 
 async function getAnnouncements(loadMore = false) {
   const user = getCurrentUser();
-  if (!loadMore) lastAnnouncementDoc = null;
 
-  let query;
-  if (user && user.isSuperAdmin) {
-    query = db.collection('announcements').orderBy('createdAt', 'desc');
-  } else {
-    query = db.collection('announcements')
-      .where('buildingId', '==', user.buildingId)
-      .orderBy('createdAt', 'desc');
+  if (!loadMore) {
+    lastAnnouncementDoc = null;
+    allAnnouncementsCache = [];
   }
 
-  query = query.limit(PAGE_SIZE);
-  if (loadMore && lastAnnouncementDoc) query = query.startAfter(lastAnnouncementDoc);
+  // Отримуємо всі або по будинку — без orderBy щоб не потребував index
+  let snapshot;
+  if (user && user.isSuperAdmin) {
+    snapshot = await db.collection('announcements').get();
+  } else {
+    snapshot = await db.collection('announcements')
+      .where('buildingId', '==', user.buildingId)
+      .get();
+  }
 
-  const snapshot = await query.get();
-  if (snapshot.docs.length > 0) lastAnnouncementDoc = snapshot.docs[snapshot.docs.length - 1];
+  let all = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  // Сортуємо на клієнті
+  all.sort((a, b) => {
+    const aT = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
+    const bT = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
+    return bT - aT;
+  });
+
+  // Пагінація на клієнті
+  const start = loadMore ? allAnnouncementsCache.length : 0;
+  const page = all.slice(start, start + PAGE_SIZE);
+  allAnnouncementsCache = loadMore ? [...allAnnouncementsCache, ...page] : page;
 
   return {
-    items: snapshot.docs.map(d => ({ id: d.id, ...d.data() })),
-    hasMore: snapshot.docs.length === PAGE_SIZE
+    items: page,
+    hasMore: all.length > allAnnouncementsCache.length
   };
 }
 
 function addAnnouncement(title, content) {
   const user = getCurrentUser();
   return db.collection('announcements').add({
-    title, content,
+    title,
+    content,
     author: user.name,
     authorApt: user.apt,
     buildingId: user.buildingId || 'all',
@@ -131,9 +148,9 @@ function getPolls() {
   return query.get().then(snapshot => {
     const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     return data.sort((a, b) => {
-      const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
-      const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
-      return bTime - aTime;
+      const aT = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
+      const bT = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
+      return bT - aT;
     });
   });
 }
@@ -180,9 +197,9 @@ function getNeighborPosts() {
   return query.get().then(snapshot => {
     const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     return data.sort((a, b) => {
-      const aTime = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
-      const bTime = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
-      return bTime - aTime;
+      const aT = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
+      const bT = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
+      return bT - aT;
     });
   });
 }
@@ -204,37 +221,43 @@ function deleteNeighborPost(id) {
 }
 
 // ---------- ПРОБЛЕМИ ----------
-let lastIssueDoc = null;
+let allIssuesCache = [];
 
 async function getIssues(loadMore = false) {
-  if (!loadMore) lastIssueDoc = null;
+  if (!loadMore) allIssuesCache = [];
+
   const user = getCurrentUser();
+  let snapshot;
 
-  let query;
   if (user.isSuperAdmin) {
-    query = db.collection('issues').orderBy('createdAt', 'desc');
+    snapshot = await db.collection('issues').get();
   } else {
-    query = db.collection('issues')
+    snapshot = await db.collection('issues')
       .where('buildingId', '==', user.buildingId)
-      .orderBy('createdAt', 'desc');
+      .get();
   }
 
-  query = query.limit(PAGE_SIZE);
-  if (loadMore && lastIssueDoc) query = query.startAfter(lastIssueDoc);
+  let all = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-  const snapshot = await query.get();
-  if (snapshot.docs.length > 0) lastIssueDoc = snapshot.docs[snapshot.docs.length - 1];
-
-  let items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-
-  // Звичайний мешканець бачить тільки свої проблеми
+  // Звичайний мешканець бачить тільки свої
   if (!user.isAdmin && !user.isSuperAdmin) {
-    items = items.filter(i => i.authorApt === user.apt);
+    all = all.filter(i => i.authorApt === user.apt);
   }
+
+  // Сортуємо на клієнті
+  all.sort((a, b) => {
+    const aT = a.createdAt ? (a.createdAt.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime()) : 0;
+    const bT = b.createdAt ? (b.createdAt.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime()) : 0;
+    return bT - aT;
+  });
+
+  const start = loadMore ? allIssuesCache.length : 0;
+  const page = all.slice(start, start + PAGE_SIZE);
+  allIssuesCache = loadMore ? [...allIssuesCache, ...page] : page;
 
   return {
-    items,
-    hasMore: snapshot.docs.length === PAGE_SIZE
+    items: page,
+    hasMore: all.length > allIssuesCache.length
   };
 }
 
@@ -284,9 +307,9 @@ function getEvents() {
   return query.get().then(snapshot => {
     const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     return data.sort((a, b) => {
-      const aTime = a.eventDate ? (a.eventDate.toMillis ? a.eventDate.toMillis() : new Date(a.eventDate).getTime()) : 0;
-      const bTime = b.eventDate ? (b.eventDate.toMillis ? b.eventDate.toMillis() : new Date(b.eventDate).getTime()) : 0;
-      return aTime - bTime;
+      const aT = a.eventDate ? (a.eventDate.toMillis ? a.eventDate.toMillis() : new Date(a.eventDate).getTime()) : 0;
+      const bT = b.eventDate ? (b.eventDate.toMillis ? b.eventDate.toMillis() : new Date(b.eventDate).getTime()) : 0;
+      return aT - bT;
     });
   });
 }
