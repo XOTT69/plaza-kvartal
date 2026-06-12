@@ -97,10 +97,5 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
-  // Service Worker
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js');
-  }
-
   console.log('Мій Дім v' + APP_VERSION + ' запущено!');
 });

@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#2563eb">
   <meta name="description" content="Мій Дім — додаток для мешканців будинку">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
   <title>Мій Дім</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -89,8 +87,6 @@
           <p id="googleLoginError" class="error-message hidden"></p>
           <div style="margin-top: 24px; font-size: 12px; color: var(--gray-400); text-align: center;">
             <span onclick="diag()" style="cursor: pointer; text-decoration: underline;">🔍 Діагностика</span>
-            <span> · </span>
-            <span onclick="if(confirm('Очистити кеш і перезавантажити?')){caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => location.reload())}" style="cursor: pointer; text-decoration: underline;">🧹 Скинути кеш</span>
           </div>
         </div>
       </div>
