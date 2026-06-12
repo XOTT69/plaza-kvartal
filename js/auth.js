@@ -44,8 +44,21 @@ async function login(aptNumber, code) {
   try {
     userCredential = await auth.signInWithEmailAndPassword(email, code);
   } catch (err) {
-    if (err.code === 'auth/user-not-found') {
-      userCredential = await auth.createUserWithEmailAndPassword(email, code);
+    const isNotFound = (
+      err.code === 'auth/user-not-found' ||
+      err.code === 'auth/invalid-credential' ||
+      err.code === 'auth/invalid-login-credentials'
+    );
+
+    if (isNotFound) {
+      try {
+        userCredential = await auth.createUserWithEmailAndPassword(email, code);
+      } catch (createErr) {
+        if (createErr.code === 'auth/email-already-in-use') {
+          throw new Error('Невірний код доступу');
+        }
+        throw new Error('Невірний номер квартири або код');
+      }
     } else {
       throw new Error('Невірний номер квартири або код');
     }
@@ -76,9 +89,8 @@ async function startGoogleLogin() {
 
     if (!email) throw new Error('Не вдалося отримати email');
 
-    // Перевіряємо, чи є цей email в колекції admin_emails
     const adminDoc = await db.collection('admin_emails').doc(email).get();
-    
+
     let isAdminUser = false;
     let aptNumber = null;
 
@@ -86,11 +98,9 @@ async function startGoogleLogin() {
       isAdminUser = true;
       aptNumber = adminDoc.data().apt || 'admin';
     } else {
-      // Перевіряємо, чи це перший адмін
       const allAdmins = await db.collection('admin_emails').get();
 
       if (allAdmins.empty) {
-        // Перший Google вхід — стає адміном
         isAdminUser = true;
         aptNumber = 'admin';
 
@@ -102,7 +112,6 @@ async function startGoogleLogin() {
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        // Створюємо запис в apartments щоб логіка адміна працювала
         const adminAptRef = db.collection('apartments').doc('admin');
         const adminAptDoc = await adminAptRef.get();
         if (!adminAptDoc.exists) {
@@ -250,23 +259,27 @@ async function removeGoogleAdmin(email) {
   await db.collection('admin_emails').doc(email).delete();
 }
 
-async function setupApartmentAccount(aptNumber, code, isAdmin, name) {
+async function setupApartmentAccount(aptNumber, code, isAdminFlag, name) {
   const aptStr = String(aptNumber);
   const email = `apt-${aptStr}@plaza-68f96.firebaseapp.com`;
 
   await db.collection('apartments').doc(aptStr).set({
-    code, isAdmin: isAdmin || false, name: name || `Квартира ${aptStr}`, email
+    code, isAdmin: isAdminFlag || false, name: name || `Квартира ${aptStr}`, email
   });
 
   try {
     await auth.createUserWithEmailAndPassword(email, code);
   } catch (err) {
     if (err.code === 'auth/email-already-in-use') {
-      const user = await auth.signInWithEmailAndPassword(email, code).catch(() => null);
-      if (user) {
-        await user.user.updatePassword(code);
+      try {
+        const cred = await auth.signInWithEmailAndPassword(email, code);
+        await cred.user.updatePassword(code);
         await auth.signOut();
+      } catch {
+        // Якщо старий пароль інший — код в Firestore вже оновлено
       }
-    } else throw err;
+    } else {
+      throw err;
+    }
   }
 }
