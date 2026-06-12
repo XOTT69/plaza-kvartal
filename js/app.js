@@ -1,13 +1,10 @@
 // ===== ДЕАКТИВАЦІЯ СТАРОГО SERVICE WORKER =====
-// Видаляємо всі Service Workers та кеш
 if ('serviceWorker' in navigator) {
-  // Скасовуємо всі попередні реєстрації
   navigator.serviceWorker.getRegistrations().then(function(registrations) {
     for (let registration of registrations) {
       registration.unregister();
     }
   });
-  // Очищаємо весь кеш
   if ('caches' in window) {
     caches.keys().then(function(names) {
       for (let name of names) {
@@ -20,11 +17,20 @@ if ('serviceWorker' in navigator) {
 // ===== ГОЛОВНИЙ ФАЙЛ ІНІЦІАЛІЗАЦІЇ =====
 
 document.addEventListener('DOMContentLoaded', async function() {
+
+  // ✅ Логаут реєструємо ОДРАЗУ — до будь-яких return
+  document.getElementById('logoutBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    if (confirm('Вийти з додатку?')) {
+      logout();
+    }
+  });
+
   // Сховати помилки
   document.getElementById('loginError').classList.add('hidden');
   document.getElementById('googleLoginError').classList.add('hidden');
 
-  // 1. Спочатку — перевіряємо, чи повернулися з Google redirect
+  // 1. Перевіряємо, чи повернулися з Google redirect
   try {
     const redirectUser = await checkGoogleRedirect();
     if (redirectUser) {
@@ -50,8 +56,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   document.getElementById('header').classList.add('hidden');
   document.getElementById('aptNumber').value = '';
   document.getElementById('aptCode').value = '';
-
-  // --- Події ---
 
   // Вхід по квартирі
   document.getElementById('loginForm').addEventListener('submit', async function(e) {
@@ -108,31 +112,22 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
-  // Вихід
-  document.getElementById('logoutBtn').addEventListener('click', function(e) {
-    e.preventDefault();
-    if (confirm('Вийти з додатку?')) {
-      logout();
-    }
-  });
-
-  // Діагностика (для кнопки на сторінці входу)
+  // Діагностика
   window.diag = async function() {
     const fbUser = auth.currentUser;
     const info = {
-      firebaseUser: fbUser ? { email: fbUser.email, uid: fbUser.uid, providers: fbUser.providerData.map(p => p.providerId) } : null,
+      firebaseUser: fbUser ? { email: fbUser.email, uid: fbUser.uid } : null,
       localStorage: getCurrentUser(),
     };
 
     try {
-      const testDoc = await db.collection('admin_emails').limit(1).get();
+      await db.collection('admin_emails').limit(1).get();
       info.firestoreAccess = true;
     } catch (e) {
       info.firestoreAccess = false;
       info.firestoreError = e.message;
     }
 
-    // Перевірка SW
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
       info.serviceWorkers = regs.length;
@@ -143,8 +138,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       'Firebase Auth: ' + (info.firebaseUser ? info.firebaseUser.email : 'немає') + '\n' +
       'Сесія: ' + (info.localStorage ? info.localStorage.name : 'немає') + '\n' +
       'Firestore: ' + (info.firestoreAccess ? '✅' : '❌ ' + (info.firestoreError || '')) + '\n' +
-      'Service Workers: ' + (info.serviceWorkers !== undefined ? info.serviceWorkers : '?') + '\n\n' +
-      'Відкрий консоль (F12) для деталей.'
+      'Service Workers: ' + (info.serviceWorkers !== undefined ? info.serviceWorkers : '?')
     );
     console.log('=== Діагностика ===', info);
   };
