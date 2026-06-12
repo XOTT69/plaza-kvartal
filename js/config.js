@@ -1,12 +1,13 @@
 // ⚠️ ТВІЙ КОНФІГ FIREBASE
 // Заміни ці дані на свої з Firebase Console
 const firebaseConfig = {
-  apiKey: "AIzaSy...",
-  authDomain: "my-dim-xxxxx.firebaseapp.com",
-  projectId: "my-dim-xxxxx",
-  storageBucket: "my-dim-xxxxx.appspot.com",
-  messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:xxxxxxxxxxxx"
+  apiKey: "AIzaSyAxcEytIFZJAXQ7WeRBiHBQSMxAfq6Ikjo",
+  authDomain: "plaza-68f96.firebaseapp.com",
+  projectId: "plaza-68f96",
+  storageBucket: "plaza-68f96.firebasestorage.app",
+  messagingSenderId: "343943080940",
+  appId: "1:343943080940:web:276693a10d949403312ec9",
+  measurementId: "G-D92KSPN4W7"
 };
 
 // Ініціалізація Firebase
