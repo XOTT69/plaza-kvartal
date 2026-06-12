@@ -46,31 +46,38 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // Google вхід
-  document.getElementById('googleLoginBtn').addEventListener('click', async function() {
-    const errorEl = document.getElementById('googleLoginError');
-    errorEl.classList.add('hidden');
-    
+  // Google вхід (через redirect — працює на мобільних та PWA)
+  document.getElementById('googleLoginBtn').addEventListener('click', function() {
+    startGoogleLogin();
+  });
+
+  // Обробка результату Google після повернення з redirect
+  async function processGoogleRedirect() {
     try {
       showLoading();
-      const user = await loginWithGoogle();
-      hideLoading();
-
-      document.getElementById('header').classList.remove('hidden');
-      document.getElementById('welcomeText').textContent = `Ласкаво просимо, ${user.name}!`;
-
-      if (user.isAdmin) {
-        document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+      const user = await handleGoogleRedirectResult();
+      if (user) {
+        hideLoading();
+        document.getElementById('header').classList.remove('hidden');
+        document.getElementById('welcomeText').textContent = `Ласкаво просимо, ${user.name}!`;
+        if (user.isAdmin) {
+          document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+        }
+        document.getElementById('userInfo').textContent = `${user.name}${user.isAdmin ? ' (Адмін)' : ''}`;
+        navigateTo('home');
+        return;
       }
-
-      document.getElementById('userInfo').textContent = `${user.name}${user.isAdmin ? ' (Адмін)' : ''}`;
-      navigateTo('home');
     } catch (err) {
       hideLoading();
+      const errorEl = document.getElementById('googleLoginError');
       errorEl.textContent = err.message;
       errorEl.classList.remove('hidden');
     }
-  });
+    hideLoading();
+  }
+
+  // Обробляємо результат Google при завантаженні сторінки
+  processGoogleRedirect();
 
   // Service Worker для PWA
   if ('serviceWorker' in navigator) {

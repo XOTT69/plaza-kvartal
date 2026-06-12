@@ -66,23 +66,44 @@ async function login(aptNumber, code) {
   return user;
 }
 
-// Вхід через GOOGLE
-async function loginWithGoogle() {
+// Вхід через GOOGLE (redirect — працює на мобільних та в PWA)
+let pendingGoogleLogin = false;
+
+// Запуск входу через Google (перенаправлення)
+function startGoogleLogin() {
   const provider = new firebase.auth.GoogleAuthProvider();
+  pendingGoogleLogin = true;
+  localStorage.setItem('pending_google_login', 'true');
+  auth.signInWithRedirect(provider);
+}
+
+// Обробка результату після повернення з Google
+async function handleGoogleRedirectResult() {
+  const pending = localStorage.getItem('pending_google_login');
+  if (!pending) return null;
   
+  localStorage.removeItem('pending_google_login');
+  pendingGoogleLogin = false;
+
   let userCredential;
   try {
-    userCredential = await auth.signInWithPopup(provider);
+    userCredential = await auth.getRedirectResult();
   } catch (err) {
-    if (err.code === 'auth/popup-closed-by-user') {
-      throw new Error('Вхід скасовано');
-    }
-    throw new Error('Помилка входу через Google: ' + err.message);
+    throw new Error('Помилка входу через Google: ' + (err.message || 'Невідома помилка'));
+  }
+
+  if (!userCredential || !userCredential.user) {
+    return null;
   }
 
   const googleUser = userCredential.user;
   const email = googleUser.email;
   const displayName = googleUser.displayName || email;
+
+  if (!email) {
+    await auth.signOut();
+    throw new Error('Не вдалося отримати email з Google акаунту');
+  }
 
   // Перевіряємо, чи є цей email в колекції admin_emails
   const adminDoc = await db.collection('admin_emails').doc(email).get();
@@ -91,11 +112,10 @@ async function loginWithGoogle() {
   let aptNumber = null;
 
   if (adminDoc.exists && adminDoc.data().isAdmin === true) {
-    // Цей email є в списку адмінів
     isAdminUser = true;
     aptNumber = adminDoc.data().apt || 'admin';
   } else {
-    // Перевіряємо, чи це перший адмін (чи є взагалі хтось в admin_emails)
+    // Перевіряємо, чи це перший адмін
     const allAdmins = await db.collection('admin_emails').get();
     
     if (allAdmins.empty) {
@@ -103,7 +123,6 @@ async function loginWithGoogle() {
       isAdminUser = true;
       aptNumber = 'admin';
       
-      // Записуємо в Firestore
       await db.collection('admin_emails').doc(email).set({
         email: email,
         name: displayName,
@@ -112,7 +131,6 @@ async function loginWithGoogle() {
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
 
-      // Також створюємо апартамент для адміна (щоб логіка працювала)
       const adminAptRef = db.collection('apartments').doc('admin');
       const adminAptDoc = await adminAptRef.get();
       if (!adminAptDoc.exists) {
@@ -124,13 +142,11 @@ async function loginWithGoogle() {
         });
       }
     } else {
-      // Не перший — відхиляємо, якщо немає в списку
       await auth.signOut();
       throw new Error('Цей Google акаунт не має доступу. Зверніться до адміністратора.');
     }
   }
 
-  // Формуємо сесію
   const user = {
     apt: aptNumber,
     isAdmin: isAdminUser,
