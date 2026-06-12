@@ -97,5 +97,31 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   });
 
+  // Діагностика (для кнопки на сторінці входу)
+  window.diag = async function() {
+    const fbUser = auth.currentUser;
+    const info = {
+      firebaseUser: fbUser ? { email: fbUser.email, uid: fbUser.uid, providers: fbUser.providerData.map(p => p.providerId) } : null,
+      localStorage: getCurrentUser(),
+    };
+
+    try {
+      const testDoc = await db.collection('admin_emails').limit(1).get();
+      info.firestoreAccess = true;
+    } catch (e) {
+      info.firestoreAccess = false;
+      info.firestoreError = e.message;
+    }
+
+    alert(
+      '=== Діагностика ===\n' +
+      'Firebase Auth: ' + (info.firebaseUser ? info.firebaseUser.email + ' (' + info.firebaseUser.providers.join(', ') + ')' : 'немає') + '\n' +
+      'Сесія: ' + (info.localStorage ? info.localStorage.name + ' (' + info.localStorage.authType + ', адмін: ' + info.localStorage.isAdmin + ')' : 'немає') + '\n' +
+      'Firestore: ' + (info.firestoreAccess ? '✅' : '❌ ' + (info.firestoreError || '')) + '\n\n' +
+      'Відкрий консоль (F12) для деталей.'
+    );
+    console.log('=== Діагностика ===', info);
+  };
+
   console.log('Мій Дім v' + APP_VERSION + ' запущено!');
 });
