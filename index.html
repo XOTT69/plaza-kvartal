@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#2563eb">
   <meta name="description" content="Мій Дім — додаток для мешканців будинку">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Мій Дім">
   <title>Мій Дім</title>
+  <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -142,6 +146,9 @@
           <button id="addAnnouncementBtn" class="btn btn-sm admin-only hidden">+ Додати</button>
         </div>
         <div id="announcementsList" class="content-list"></div>
+        <div id="announcementsLoadMore" class="hidden" style="text-align:center; margin-top: 16px;">
+          <button onclick="loadMoreAnnouncements()" class="btn btn-secondary">Завантажити ще</button>
+        </div>
       </div>
 
       <!-- КОНТАКТИ -->
@@ -177,6 +184,9 @@
           <button id="addIssueBtn" class="btn btn-sm">+ Повідомити</button>
         </div>
         <div id="issuesList" class="content-list"></div>
+        <div id="issuesLoadMore" class="hidden" style="text-align:center; margin-top: 16px;">
+          <button onclick="loadMoreIssues()" class="btn btn-secondary">Завантажити ще</button>
+        </div>
       </div>
 
       <!-- ПОДІЇ -->
@@ -207,7 +217,7 @@
             <p>Редагувати список контактів</p>
           </div>
           <div class="admin-card" data-section="google-admins">
-            <h3>🔐 Google адміни (для бухгалтерії)</h3>
+            <h3>🔐 Google адміни</h3>
             <p>Хто може входити через Google</p>
           </div>
         </div>
@@ -242,6 +252,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 
   <!-- App scripts -->
   <script src="js/config.js"></script>
