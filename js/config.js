@@ -1,5 +1,3 @@
-// ⚠️ ТВІЙ КОНФІГ FIREBASE
-// Заміни ці дані на свої з Firebase Console
 const firebaseConfig = {
   apiKey: "AIzaSyAxcEytIFZJAXQ7WeRBiHBQSMxAfq6Ikjo",
   authDomain: "plaza-68f96.firebaseapp.com",
@@ -10,27 +8,26 @@ const firebaseConfig = {
   measurementId: "G-D92KSPN4W7"
 };
 
-// Ініціалізація Firebase
 firebase.initializeApp(firebaseConfig);
 
 const db = firebase.firestore();
 const auth = firebase.auth();
 
-// Налаштування
-const APP_VERSION = '1.0.0';
-const MAX_APT = 24;
+const APP_VERSION = '2.0.0';
 
-// Хелпер для дати
+// Зчитати buildingId з URL: ?b=plaza1
+function getBuildingIdFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('b') || null;
+}
+
 function formatDate(timestamp) {
   if (!timestamp) return '';
   const d = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
   const now = new Date();
   const diff = now - d;
   const day = 86400000;
-
-  if (diff < day) {
-    return d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-  }
+  if (diff < day) return d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
   if (diff < 2 * day) return 'Вчора';
   return d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' });
 }
