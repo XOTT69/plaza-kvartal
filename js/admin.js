@@ -15,6 +15,7 @@ function renderAdmin() {
     case 'apartments': renderAdminApartments(); break;
     case 'announcements': renderAdminAnnouncements(); break;
     case 'contacts': renderAdminContacts(); break;
+    case 'google-admins': renderAdminGoogleAdmins(); break;
   }
 }
 
@@ -224,6 +225,87 @@ function confirmDeleteContact(id) {
     deleteContact(id).then(() => {
       showToast('Видалено', 'success');
       renderAdminContacts();
+    });
+  }
+}
+
+// ===== GOOGLE АДМІНИ =====
+async function renderAdminGoogleAdmins() {
+  const content = document.getElementById('adminSectionContent');
+  content.innerHTML = '<div class="loading-spinner" style="position: relative;"><div class="spinner"></div></div>';
+
+  try {
+    const admins = await getGoogleAdmins();
+    content.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 16px;">Google адміни (${admins.length})</h3>
+        <button class="btn btn-sm btn-primary" onclick="showAddGoogleAdmin()">+ Додати</button>
+      </div>
+      <div class="content-list">
+        ${admins.length === 0 ? '<div class="empty-state"><div class="empty-icon">🔐</div><p>Немає Google адмінів.<br>Перший, хто увійде через Google, стане адміном автоматично.</p></div>' : 
+          admins.map(a => `
+            <div class="content-card" style="padding: 12px 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <strong>${escapeHtml(a.name || a.email)}</strong>
+                  <div style="font-size: 13px; color: var(--gray-500);">${escapeHtml(a.email)}</div>
+                  <div style="font-size: 12px; color: var(--gray-400);">${a.createdAt ? formatDate(a.createdAt) : ''}</div>
+                </div>
+                <button class="btn btn-sm btn-danger" onclick="confirmRemoveGoogleAdmin('${escapeHtml(a.email)}')">🗑️</button>
+              </div>
+            </div>
+          `).join('')
+        }
+      </div>
+    `;
+  } catch (e) {
+    content.innerHTML = '<p style="color: var(--danger);">Помилка завантаження</p>';
+  }
+}
+
+function showAddGoogleAdmin() {
+  openModal('Додати Google адміна', `
+    <div class="form-group">
+      <label>Email Google акаунту</label>
+      <input type="email" id="googleAdminEmail" class="form-input" placeholder="admin@gmail.com">
+    </div>
+    <div class="form-group">
+      <label>Ім'я (необов'язково)</label>
+      <input type="text" id="googleAdminName" class="form-input" placeholder="Ім'я адміністратора">
+    </div>
+    <button onclick="submitGoogleAdmin()" class="btn btn-primary btn-full">Додати</button>
+    <p style="margin-top: 12px; font-size: 13px; color: var(--gray-500);">
+      💡 Ця людина зможе входити через Google та матиме права адміна.
+    </p>
+  `);
+}
+
+async function submitGoogleAdmin() {
+  const email = document.getElementById('googleAdminEmail').value.trim();
+  const name = document.getElementById('googleAdminName').value.trim();
+
+  if (!email) {
+    showToast('Введіть email', 'error');
+    return;
+  }
+
+  try {
+    await addGoogleAdmin(email, name || email);
+    closeModal();
+    showToast('Адміна додано', 'success');
+    renderAdminGoogleAdmins();
+  } catch (e) {
+    showToast('Помилка: ' + e.message, 'error');
+  }
+}
+
+function confirmRemoveGoogleAdmin(email) {
+  if (confirm(`Видалити адміна ${email}?`)) {
+    removeGoogleAdmin(email).then(() => {
+      showToast('Адміна видалено', 'success');
+      renderAdminGoogleAdmins();
+    }).catch(e => {
+      showToast('Помилка: ' + e.message, 'error');
     });
   }
 }

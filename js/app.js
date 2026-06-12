@@ -46,6 +46,32 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
+  // Google вхід
+  document.getElementById('googleLoginBtn').addEventListener('click', async function() {
+    const errorEl = document.getElementById('googleLoginError');
+    errorEl.classList.add('hidden');
+    
+    try {
+      showLoading();
+      const user = await loginWithGoogle();
+      hideLoading();
+
+      document.getElementById('header').classList.remove('hidden');
+      document.getElementById('welcomeText').textContent = `Ласкаво просимо, ${user.name}!`;
+
+      if (user.isAdmin) {
+        document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+      }
+
+      document.getElementById('userInfo').textContent = `${user.name}${user.isAdmin ? ' (Адмін)' : ''}`;
+      navigateTo('home');
+    } catch (err) {
+      hideLoading();
+      errorEl.textContent = err.message;
+      errorEl.classList.remove('hidden');
+    }
+  });
+
   // Service Worker для PWA
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')

@@ -293,6 +293,58 @@ textarea.form-input {
   text-align: center;
 }
 
+/* ========== AUTH DIVIDER ========== */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  width: 100%;
+  max-width: 320px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--gray-200);
+}
+
+.auth-divider span {
+  color: var(--gray-400);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* ========== GOOGLE BUTTON ========== */
+.btn-google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+  background: white;
+  color: var(--gray-700);
+  -webkit-appearance: none;
+}
+
+.btn-google:hover {
+  background: var(--gray-50);
+  border-color: var(--gray-300);
+}
+
+.btn-google:active {
+  transform: scale(0.97);
+}
+
 /* ========== BUTTONS ========== */
 .btn {
   display: inline-flex;
