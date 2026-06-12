@@ -1,4 +1,4 @@
-// ===== АВТОРИЗАЦІЯ =====
+// ===== АВТОРИЗАЦІЯ (Firebase Auth) =====
 
 const AUTH_KEY = 'my_dim_auth';
 
@@ -25,25 +25,41 @@ function isAdmin() {
   return user && user.isAdmin === true;
 }
 
-// Вхід: перевіряємо номер квартири та код
+// Вхід через Firebase Auth (email + password)
 async function login(aptNumber, code) {
   const aptStr = String(aptNumber);
-  const doc = await db.collection('apartments').doc(aptStr).get();
+  const email = `apt-${aptStr}@plaza-68f96.firebaseapp.com`;
 
-  if (!doc.exists) {
+  // 1. Спочатку перевіряємо код квартири в Firestore
+  const aptDoc = await db.collection('apartments').doc(aptStr).get();
+  if (!aptDoc.exists) {
     throw new Error('Невірний номер квартири або код');
   }
 
-  const data = doc.data();
-
-  if (data.code !== code) {
+  const aptData = aptDoc.data();
+  if (aptData.code !== code) {
     throw new Error('Невірний номер квартири або код');
   }
 
+  // 2. Спроба входу через Firebase Auth (або створення акаунту)
+  let userCredential;
+  try {
+    userCredential = await auth.signInWithEmailAndPassword(email, code);
+  } catch (err) {
+    if (err.code === 'auth/user-not-found') {
+      // Код вже перевірено — створюємо акаунт
+      userCredential = await auth.createUserWithEmailAndPassword(email, code);
+    } else {
+      throw new Error('Невірний номер квартири або код');
+    }
+  }
+
+  // 3. Формуємо сесію
   const user = {
     apt: aptStr,
-    isAdmin: data.isAdmin === true,
-    name: data.name || `Квартира ${aptStr}`
+    isAdmin: aptData.isAdmin === true,
+    name: aptData.name || `Квартира ${aptStr}`,
+    uid: userCredential.user.uid
   };
 
   saveUserSession(user);
@@ -51,7 +67,10 @@ async function login(aptNumber, code) {
 }
 
 // Вихід
-function logout() {
+async function logout() {
+  try {
+    await auth.signOut();
+  } catch (e) {}
   clearUserSession();
   window.location.reload();
 }
@@ -79,4 +98,34 @@ function checkAuth() {
   document.getElementById('userInfo').textContent = `${user.name}${user.isAdmin ? ' (Адмін)' : ''}`;
 
   return user;
+}
+
+// Створити/оновити акаунт квартири (тільки адмін)
+async function setupApartmentAccount(aptNumber, code, isAdmin, name) {
+  const aptStr = String(aptNumber);
+  const email = `apt-${aptStr}@plaza-68f96.firebaseapp.com`;
+
+  // Зберігаємо в Firestore
+  await db.collection('apartments').doc(aptStr).set({
+    code: code,
+    isAdmin: isAdmin || false,
+    name: name || `Квартира ${aptStr}`,
+    email: email
+  });
+
+  // Створюємо або оновлюємо Firebase Auth акаунт
+  try {
+    await auth.createUserWithEmailAndPassword(email, code);
+  } catch (err) {
+    if (err.code === 'auth/email-already-in-use') {
+      // Оновлюємо пароль
+      const user = await auth.signInWithEmailAndPassword(email, code).catch(() => null);
+      if (user) {
+        await user.user.updatePassword(code);
+        await auth.signOut();
+      }
+    } else {
+      throw err;
+    }
+  }
 }

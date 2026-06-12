@@ -106,7 +106,7 @@ async function submitApartment() {
   }
 
   try {
-    await setApartment(num, code, isAdmin, name);
+    await setupApartmentAccount(num, code, isAdmin, name);
     closeModal();
     showToast('Квартиру збережено', 'success');
     renderAdminApartments();

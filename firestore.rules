@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // === КВАРТИРИ ===
+    // Адмін може читати/писати всі квартири
+    // Звичайний користувач читає тільки свою квартиру
+    match /apartments/{aptId} {
+      allow read: if request.auth != null 
+        && (resource.data.isAdmin == true || request.auth.uid == get(/databases/$(database)/documents/apartments/$(aptId)).data.uid);
+      allow write: if request.auth != null 
+        && get(/databases/$(database)/documents/apartments/$(request.auth.uid.split('apt-')[1])).data.isAdmin == true;
+    }
+
+    // === ОГОЛОШЕННЯ ===
+    // Читати може будь-хто авторизований
+    // Писати — тільки адмін
+    match /announcements/{docId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && isAdmin(request.auth.uid);
+    }
+
+    // === КОНТАКТИ ===
+    match /contacts/{docId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && isAdmin(request.auth.uid);
+    }
+
+    // === ГОЛОСУВАННЯ ===
+    match /polls/{docId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && isAdmin(request.auth.uid);
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && isAdmin(request.auth.uid);
+    }
+
+    // === СУСІДСЬКІ ОГОЛОШЕННЯ ===
+    match /neighborPosts/{docId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow delete: if request.auth != null && (
+        resource.data.authorApt == request.auth.uid.split('apt-')[1] 
+        || isAdmin(request.auth.uid)
+      );
+      allow update: if request.auth != null && isAdmin(request.auth.uid);
+    }
+
+    // === ПРОБЛЕМИ ===
+    match /issues/{docId} {
+      allow read: if request.auth != null && (
+        resource.data.authorApt == request.auth.uid.split('apt-')[1] 
+        || isAdmin(request.auth.uid)
+      );
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (
+        resource.data.authorApt == request.auth.uid.split('apt-')[1] 
+        || isAdmin(request.auth.uid)
+      );
+      allow delete: if request.auth != null && isAdmin(request.auth.uid);
+    }
+
+    // === ПОДІЇ ===
+    match /events/{docId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && isAdmin(request.auth.uid);
+    }
+
+    // Функція перевірки адміна
+    function isAdmin(uid) {
+      let aptNumber = uid.split('apt-')[1];
+      return get(/databases/$(database)/documents/apartments/$(aptNumber)).data.isAdmin == true;
+    }
+  }
+}
