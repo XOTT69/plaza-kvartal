@@ -106,12 +106,12 @@ async function startGoogleLogin() {
     const result = await auth.signInWithPopup(provider);
     return await processGoogleUser(result.user);
   } catch (err) {
-    if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
-      if (err.code === 'auth/popup-blocked') {
-        localStorage.setItem('expect_google_redirect', 'true');
-        await auth.signInWithRedirect(provider);
-        return null;
-      }
+    if (err.code === 'auth/popup-blocked') {
+      localStorage.setItem('expect_google_redirect', 'true');
+      await auth.signInWithRedirect(provider);
+      return null;
+    }
+    if (err.code === 'auth/popup-closed-by-user') {
       throw new Error('Вхід скасовано');
     }
     throw err;
@@ -178,11 +178,26 @@ async function checkGoogleRedirect() {
   }
 }
 
-// Вихід
+// Вихід — з таймаутом щоб не зависало
 async function logout() {
-  try { await auth.signOut(); } catch (e) {}
+  // Чистимо сесію ОДРАЗУ не чекаючи Firebase
   clearUserSession();
-  window.location.href = window.location.pathname; // чистимо URL параметри теж
+
+  // Firebase signOut з таймаутом 3 секунди
+  try {
+    await Promise.race([
+      auth.signOut(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 3000)
+      )
+    ]);
+  } catch (e) {
+    // Ігноруємо — сесія вже очищена локально
+    console.log('signOut:', e.message);
+  }
+
+  // Перезавантажуємо без URL параметрів
+  window.location.href = window.location.pathname;
 }
 
 // Оновити UI після логіну
