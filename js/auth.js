@@ -5,11 +5,7 @@ const AUTH_KEY = 'my_dim_auth';
 function getCurrentUser() {
   const data = localStorage.getItem(AUTH_KEY);
   if (!data) return null;
-  try {
-    return JSON.parse(data);
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(data); } catch { return null; }
 }
 
 function saveUserSession(user) {
@@ -25,12 +21,19 @@ function isAdmin() {
   return user && user.isAdmin === true;
 }
 
-// Вхід через КВАРТИРУ + КОД
-async function login(aptNumber, code) {
-  const aptStr = String(aptNumber);
-  const email = `apt-${aptStr}@plaza-68f96.firebaseapp.com`;
+function isSuperAdmin() {
+  const user = getCurrentUser();
+  return user && user.isSuperAdmin === true;
+}
 
-  const aptDoc = await db.collection('apartments').doc(aptStr).get();
+// Вхід через КВАРТИРУ + КОД
+async function login(buildingId, aptNumber, code) {
+  const aptStr = String(aptNumber);
+  const docId = `${buildingId}__${aptStr}`;
+  const email = `apt-${buildingId}-${aptStr}@plaza-68f96.firebaseapp.com`;
+
+  // Перевіряємо квартиру
+  const aptDoc = await db.collection('apartments').doc(docId).get();
   if (!aptDoc.exists) {
     throw new Error('Невірний номер квартири або код');
   }
@@ -40,6 +43,11 @@ async function login(aptNumber, code) {
     throw new Error('Невірний номер квартири або код');
   }
 
+  // Отримуємо дані будинку
+  const buildingDoc = await db.collection('buildings').doc(buildingId).get();
+  const buildingData = buildingDoc.exists ? buildingDoc.data() : { name: 'Будинок', address: '' };
+
+  // Firebase Auth
   let userCredential;
   try {
     userCredential = await auth.signInWithEmailAndPassword(email, code);
@@ -49,7 +57,6 @@ async function login(aptNumber, code) {
       err.code === 'auth/invalid-credential' ||
       err.code === 'auth/invalid-login-credentials'
     );
-
     if (isNotFound) {
       try {
         userCredential = await auth.createUserWithEmailAndPassword(email, code);
@@ -66,7 +73,11 @@ async function login(aptNumber, code) {
 
   const user = {
     apt: aptStr,
+    buildingId: buildingId,
+    buildingName: buildingData.name || 'Будинок',
+    buildingAddress: buildingData.address || '',
     isAdmin: aptData.isAdmin === true,
+    isSuperAdmin: false,
     name: aptData.name || `Квартира ${aptStr}`,
     uid: userCredential.user.uid,
     authType: 'password'
@@ -76,7 +87,7 @@ async function login(aptNumber, code) {
   return user;
 }
 
-// Вхід через GOOGLE (popup)
+// Вхід через GOOGLE (тільки для супер-адмінів)
 async function startGoogleLogin() {
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
@@ -90,38 +101,18 @@ async function startGoogleLogin() {
     if (!email) throw new Error('Не вдалося отримати email');
 
     const adminDoc = await db.collection('admin_emails').doc(email).get();
-
     let isAdminUser = false;
-    let aptNumber = null;
 
     if (adminDoc.exists && adminDoc.data().isAdmin === true) {
       isAdminUser = true;
-      aptNumber = adminDoc.data().apt || 'admin';
     } else {
       const allAdmins = await db.collection('admin_emails').get();
-
       if (allAdmins.empty) {
         isAdminUser = true;
-        aptNumber = 'admin';
-
         await db.collection('admin_emails').doc(email).set({
-          email: email,
-          name: displayName,
-          isAdmin: true,
-          apt: 'admin',
+          email, name: displayName, isAdmin: true,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-
-        const adminAptRef = db.collection('apartments').doc('admin');
-        const adminAptDoc = await adminAptRef.get();
-        if (!adminAptDoc.exists) {
-          await adminAptRef.set({
-            code: 'google-admin',
-            isAdmin: true,
-            name: displayName,
-            email: email
-          });
-        }
       } else {
         await auth.signOut();
         throw new Error('Цей Google акаунт не має доступу. Зверніться до адміністратора.');
@@ -129,10 +120,13 @@ async function startGoogleLogin() {
     }
 
     const user = {
-      apt: aptNumber,
+      apt: 'admin',
+      buildingId: null,
+      buildingName: 'Всі будинки',
       isAdmin: isAdminUser,
+      isSuperAdmin: true,
       name: displayName,
-      email: email,
+      email,
       uid: googleUser.uid,
       authType: 'google',
       photoURL: googleUser.photoURL || null
@@ -170,30 +164,28 @@ async function checkGoogleRedirect() {
 
     const adminDoc = await db.collection('admin_emails').doc(email).get();
     let isAdminUser = false;
-    let aptNumber = null;
 
     if (adminDoc.exists && adminDoc.data().isAdmin === true) {
       isAdminUser = true;
-      aptNumber = adminDoc.data().apt || 'admin';
     } else {
       const allAdmins = await db.collection('admin_emails').get();
       if (allAdmins.empty) {
         isAdminUser = true;
-        aptNumber = 'admin';
         await db.collection('admin_emails').doc(email).set({
-          email, name: displayName, isAdmin: true, apt: 'admin',
+          email, name: displayName, isAdmin: true,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
       } else {
         await auth.signOut();
-        throw new Error('Цей Google акаунт не має доступу. Зверніться до адміністратора.');
+        throw new Error('Цей Google акаунт не має доступу.');
       }
     }
 
     const user = {
-      apt: aptNumber, isAdmin: isAdminUser, name: displayName,
-      email, uid: googleUser.uid, authType: 'google',
-      photoURL: googleUser.photoURL || null
+      apt: 'admin', buildingId: null, buildingName: 'Всі будинки',
+      isAdmin: isAdminUser, isSuperAdmin: true,
+      name: displayName, email, uid: googleUser.uid,
+      authType: 'google', photoURL: googleUser.photoURL || null
     };
     saveUserSession(user);
     return user;
@@ -205,14 +197,12 @@ async function checkGoogleRedirect() {
 
 // Вихід
 async function logout() {
-  try {
-    await auth.signOut();
-  } catch (e) {}
+  try { await auth.signOut(); } catch (e) {}
   clearUserSession();
   window.location.reload();
 }
 
-// Оновлюємо UI
+// Оновити UI після логіну
 function applyAuthUI(user) {
   if (!user) {
     document.getElementById('header').classList.add('hidden');
@@ -230,10 +220,13 @@ function applyAuthUI(user) {
     document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
   }
 
-  document.getElementById('userInfo').textContent = `${user.name}${user.isAdmin ? ' (Адмін)' : user.apt ? ` · Кв.${user.apt}` : ''}`;
+  const aptInfo = user.apt && user.apt !== 'admin' ? ` · Кв.${user.apt}` : '';
+  const adminInfo = user.isSuperAdmin ? ' (Супер-адмін)' : user.isAdmin ? ' (Адмін)' : '';
+  const buildingInfo = user.buildingName ? ` · ${user.buildingName}` : '';
+  document.getElementById('userInfo').textContent = `${user.name}${adminInfo}${aptInfo}${buildingInfo}`;
 }
 
-// Адмін функції
+// ---------- АДМІН ФУНКЦІЇ ----------
 async function getGoogleAdmins() {
   const snapshot = await db.collection('admin_emails').get();
   return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -247,7 +240,7 @@ async function addGoogleAdmin(email, name) {
     await db.collection('admin_emails').doc(email).update({ isAdmin: true, name: name || email });
   } else {
     await db.collection('admin_emails').doc(email).set({
-      email, name: name || email, isAdmin: true, apt: 'admin',
+      email, name: name || email, isAdmin: true,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   }
@@ -259,12 +252,18 @@ async function removeGoogleAdmin(email) {
   await db.collection('admin_emails').doc(email).delete();
 }
 
-async function setupApartmentAccount(aptNumber, code, isAdminFlag, name) {
+async function setupApartmentAccount(buildingId, aptNumber, code, isAdminFlag, name) {
   const aptStr = String(aptNumber);
-  const email = `apt-${aptStr}@plaza-68f96.firebaseapp.com`;
+  const docId = `${buildingId}__${aptStr}`;
+  const email = `apt-${buildingId}-${aptStr}@plaza-68f96.firebaseapp.com`;
 
-  await db.collection('apartments').doc(aptStr).set({
-    code, isAdmin: isAdminFlag || false, name: name || `Квартира ${aptStr}`, email
+  await db.collection('apartments').doc(docId).set({
+    buildingId,
+    aptNumber: aptStr,
+    code,
+    isAdmin: isAdminFlag || false,
+    name: name || `Квартира ${aptStr}`,
+    email
   });
 
   try {
@@ -276,10 +275,14 @@ async function setupApartmentAccount(aptNumber, code, isAdminFlag, name) {
         await cred.user.updatePassword(code);
         await auth.signOut();
       } catch {
-        // Якщо старий пароль інший — код в Firestore вже оновлено
+        // код вже оновлено у Firestore
       }
     } else {
       throw err;
     }
   }
+}
+
+function deleteApartment(docId) {
+  return db.collection('apartments').doc(String(docId)).delete();
 }
